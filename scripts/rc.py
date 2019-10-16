@@ -1,11 +1,10 @@
-from copy import deepcopy
 import sys
 import torch
-import torch.nn.functional as F
 import numpy as np
-from pytorch_transformers import GPT2Tokenizer, GPT2LMHeadModel
 sys.path.append('..')
-import argparse
+import json
+from collections import defaultdict
+from tqdm import tqdm
 
 from lama.modules import build_model_by_name
 import lama.options as options
@@ -13,9 +12,6 @@ from lama.modules import base_connector
 from lama import attacks
 
 def main(args):
-    np.random.seed(0)
-    torch.random.manual_seed(0)
-    torch.cuda.manual_seed(0)
     try_cuda = torch.cuda.is_available()
 
     model = build_model_by_name(args.models_names[0], args)
@@ -65,17 +61,49 @@ def main(args):
             input()
 
 
+def pattern_score(args, pattern_json, output_file):
+    try_cuda = torch.cuda.is_available()
+    model = build_model_by_name(args.models_names[0], args)
+    with open(pattern_json, 'r') as fin:
+        pattern_json = json.load(fin)
+
+    batch_size = 32
+    pid2pattern = defaultdict(lambda: {})
+    for pid in tqdm(sorted(pattern_json)):
+        #if not pid.startswith('P69_'):
+        #    continue
+        snippets = pattern_json[pid]['snippet']
+        occs = pattern_json[pid]['occs']
+        for (snippet, direction), count in snippets:
+            if len(snippet) <= 5 or len(snippet) >= 100:  # longer than 5 chars
+                continue
+            loss = 0
+            num_batch = np.ceil(len(occs) / batch_size)
+            for b in range(0, len(occs), batch_size):
+                occs_batch = occs[b:b + batch_size]
+                sentences = ['{} {} ({})'.format(h, snippet, t) i
+                             f direction == 1 else '{} {} ({})'.format(t, snippet, h) for h, t in occs_batch]
+                #print((snippet, direction), count)
+                #print(sentences)
+                #input()
+                loss += model.get_rc_loss(sentences, try_cuda=try_cuda)[0].item()
+            pid2pattern[pid][snippet] = loss / num_batch
+        #print(pid)
+        #print(sorted(pid2pattern[pid].items(), key=lambda x: x[1]))
+        #input()
+
+    with open(output_file, 'w') as fout:
+        for pid, pats in pid2pattern.items():
+            pats = sorted(pats.items(), key=lambda x: x[1])
+            fout.write('{}\t{}\n'.format(pid, json.dumps(pats)))
+
+
 if __name__ == '__main__':
-    '''
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--models_names",
-        "--m",
-        help="comma separated list of language models",
-        required=True,
-    )
-    args = parser.parse_args()
-    '''
+    np.random.seed(0)
+    torch.random.manual_seed(0)
+    torch.cuda.manual_seed(0)
+
     parser = options.get_eval_generation_parser()
     args = options.parse_args(parser)
-    main(args)
+    #main(args)
+    pattern_score(args, 'patterns.json', 'output/patterns.txt')
