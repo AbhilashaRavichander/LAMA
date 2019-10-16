@@ -4,6 +4,7 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 #
+from typing import List
 import re
 import torch
 
@@ -66,7 +67,14 @@ def default_tokenizer(line):
     return result
 
 
+extracted_grads = []
+def extract_grad_hook(module, grad_in, grad_out):
+    extracted_grads.append(grad_out[0])
+
+
 class Base_Connector():
+
+    EMB_DIM = 0
 
     def __init__(self):
 
@@ -75,6 +83,10 @@ class Base_Connector():
 
         # This defines where the device where the model is. Changed by try_cuda.
         self._model_device = 'cpu'
+
+    @property
+    def model(self):
+        raise NotImplementedError
 
     def optimize_top_layer(self, vocab_subset):
         """
@@ -153,3 +165,36 @@ class Base_Connector():
                                                    in the batch
         """
         raise NotImplementedError()
+
+    def add_hooks(self):
+        for module in self.model.modules():
+            if isinstance(module, torch.nn.Embedding):
+                if module.weight.shape[0] == self.EMB_DIM:
+                    module.weight.requires_grad = True
+                    module.register_backward_hook(extract_grad_hook)
+
+    def get_embedding_weight(self):
+        for module in self.model.modules():
+            if isinstance(module, torch.nn.Embedding):
+                if module.weight.shape[0] == self.EMB_DIM:
+                    return module.weight.detach()
+
+    def get_rc_loss(self, sentences_list: List[str], try_cuda: bool = False):
+        raise NotImplementedError()
+
+    def zero_grad(self):
+        self.model.zero_grad()
+
+    def tokenizer_for_rc(self, sentence: str):
+        tokenized_text = []
+        bracket_indices = []
+        unbracket_indices = []
+        for chunk_idx, chunk in enumerate(re.split('\(|\)', sentence)):
+            chunk = chunk.strip()
+            if chunk:
+                chunk_tokens = self.tokenizer.tokenize(chunk)
+                tokenized_text.extend(chunk_tokens)
+                mask = 0 if chunk_idx % 2 == 0 else 1  # "(" and ")" always occur in pairs
+                bracket_indices.extend([mask] * len(chunk_tokens))
+                unbracket_indices.extend([1 - mask] * len(chunk_tokens))
+        return tokenized_text, bracket_indices, unbracket_indices

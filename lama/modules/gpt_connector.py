@@ -4,12 +4,16 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 #
+from typing import List
+import re
 from pytorch_pretrained_bert import OpenAIGPTLMHeadModel, OpenAIGPTTokenizer
 import numpy as np
 from lama.modules.base_connector import *
 
 
 class GPT(Base_Connector):
+
+    EMB_DIM = 40478  # TODO: identify the embedding using its dimension
 
     def __init__(self, args):
         super().__init__()
@@ -62,6 +66,10 @@ class GPT(Base_Connector):
 
         self.eos_id = self.inverse_vocab[OPENAI_EOS]
         self.model_vocab = self.vocab
+
+    @property
+    def model(self):
+        return self.gpt_model
 
     def _cuda(self):
         self.gpt_model.cuda()
@@ -159,3 +167,57 @@ class GPT(Base_Connector):
 
         # As we only return the last layer, [] to have the same format as other models
         return [output], sentence_lengths, tokenized_text_list
+
+    def __get_input_tensors_for_rc(self, sentence: str):
+        """Concatenates, tokenize and converts a sentences to model inputs.
+
+        Args:
+            sentence_list: A list of strings. The string may contain brackets.
+
+        Returns:
+            A tuple (src_tensor, dst_tensor, masked_indices, tokenized_text).
+                src_tensor: torch.LongTensor with shape (seq_len), the input to
+                    the new without the last symbol and with EOS prepended.
+                dst_tensor: torch.LongTensor with shape (seq_len).
+                masked_indices: A list of indices of [MASK] in dst_tensor.
+                tokenized_text: A list of token string.
+            """
+        # Split the sentence by brackets and tokenize the chunks independently.
+        tokenized_text, bracket_indices, unbracket_indices = self.tokenizer_for_rc(sentence)
+
+        full_indexed_tokens = [self.eos_id] + self.tokenizer.convert_tokens_to_ids(tokenized_text)
+        bracket_indices = [0] + bracket_indices
+        unbracket_indices = [0] + unbracket_indices
+        src_tokens = full_indexed_tokens
+        dst_tokens = full_indexed_tokens
+
+        return torch.tensor(src_tokens), \
+               torch.tensor(dst_tokens), \
+               torch.tensor(bracket_indices), \
+               torch.tensor(unbracket_indices), \
+               tokenized_text
+
+    def get_rc_loss(self, sentence_list: List[str], try_cuda: bool = False):
+        if try_cuda:
+            self.try_cuda()
+
+        self.model.eval()
+
+        src_tensor, dst_tensor, bracket_indices, unbracket_indices, tokenized_text = \
+            zip(*[self.__get_input_tensors_for_rc(sentence) for sentence in sentence_list])
+
+        # SHAPE: (batch_size, seq_len)
+        src_tensor_batch = torch.nn.utils.rnn.pad_sequence(
+            src_tensor, batch_first=True).to(self._model_device)
+        dst_tensor_batch = torch.nn.utils.rnn.pad_sequence(
+            dst_tensor, batch_first=True).to(self._model_device)
+        bracket_indices_batch = torch.nn.utils.rnn.pad_sequence(
+            bracket_indices, batch_first=True).to(self._model_device)
+        unbracket_indices_batch = torch.nn.utils.rnn.pad_sequence(
+            unbracket_indices, batch_first=True).to(self._model_device)
+
+        masked_dst_tensor_batch = dst_tensor_batch * bracket_indices_batch
+        masked_dst_tensor_batch[masked_dst_tensor_batch == 0] = -1  # -1 mask out irrelevant positions
+
+        loss = self.model(src_tensor_batch, lm_labels=masked_dst_tensor_batch)
+        return loss, dst_tensor_batch, bracket_indices_batch, unbracket_indices_batch

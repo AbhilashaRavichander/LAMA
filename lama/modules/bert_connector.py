@@ -8,6 +8,7 @@ import torch
 import pytorch_pretrained_bert.tokenization as btok
 from pytorch_pretrained_bert import BertTokenizer, BertForMaskedLM, BasicTokenizer, BertModel
 import numpy as np
+from copy import deepcopy
 from lama.modules.base_connector import *
 import torch.nn.functional as F
 
@@ -47,6 +48,8 @@ class CustomBaseTokenizer(BasicTokenizer):
 
 
 class Bert(Base_Connector):
+
+    EMB_DIM = 28996  # TODO: identify the embedding using its dimension
 
     def __init__(self, args, vocab_subset = None):
         super().__init__()
@@ -93,6 +96,10 @@ class Bert(Base_Connector):
         self.pad_id = self.inverse_vocab[BERT_PAD]
 
         self.unk_index = self.inverse_vocab[BERT_UNK]
+
+    @property
+    def model(self):
+        return self.masked_bert_model
 
     def get_id(self, string):
         tokenized_text = self.tokenizer.tokenize(string)
@@ -260,3 +267,71 @@ class Bert(Base_Connector):
         # of each attention block (i.e. 12 full sequences for BERT-base, 24 for BERT-large), each
         # encoded-hidden-state is a torch.FloatTensor of size [batch_size, sequence_length, hidden_size]
         return all_encoder_layers, sentence_lengths, tokenized_text_list
+
+    def __get_input_tensors_for_rc(self, sentence: str, mask_source: bool = True):
+        tokenized_text, bracket_indices, unbracket_indices = self.tokenizer_for_rc(sentence)
+        segment_id = np.zeros(len(tokenized_text), dtype=int).tolist()
+
+        # add [SEP] token at the end
+        tokenized_text.append(BERT_SEP)
+        segment_id.append(0)
+        bracket_indices.append(0)
+        unbracket_indices.append(0)
+        # add [CLS] token at the beginning
+        tokenized_text.insert(0, BERT_CLS)
+        segment_id.insert(0, 0)
+        bracket_indices.insert(0, 0)
+        unbracket_indices.insert(0, 0)
+
+        src_tokens = deepcopy(tokenized_text)
+        # mask out bracket
+        if mask_source:
+            for i, b in enumerate(bracket_indices):
+                if b:
+                    src_tokens[i] = MASK
+        # convert to ids
+        src_tokens = self.tokenizer.convert_tokens_to_ids(src_tokens)
+        dst_tokens = self.tokenizer.convert_tokens_to_ids(tokenized_text)
+
+        # Convert inputs to PyTorch tensors
+        src_tensor = torch.tensor(src_tokens)
+        dst_tensor = torch.tensor(dst_tokens)
+        bracket_tensor = torch.tensor(bracket_indices)
+        unbracket_tensor = torch.tensor(unbracket_indices)
+        segments_tensors = torch.tensor(segment_id)
+
+        return src_tensor, dst_tensor, bracket_tensor, unbracket_tensor, dst_tokens, segments_tensors
+
+    def get_rc_loss(self, sentence_list: List[str], try_cuda: bool = False):
+        if try_cuda:
+            self.try_cuda()
+
+        self.model.train()
+
+        src_tensor, dst_tensor, bracket_indices, unbracket_indices, tokenized_text, segments_tensors = \
+            zip(*[self.__get_input_tensors_for_rc(sentence, mask_source=True) for sentence in sentence_list])
+        seq_len = [s.size(0) for s in src_tensor]
+        max_len = np.max(seq_len)
+
+        # SHAPE: (batch_size, seq_len)
+        src_tensor_batch = torch.nn.utils.rnn.pad_sequence(
+            src_tensor, batch_first=True, padding_value=self.pad_id).to(self._model_device)
+        dst_tensor_batch = torch.nn.utils.rnn.pad_sequence(
+            dst_tensor, batch_first=True).to(self._model_device)
+        bracket_indices_batch = torch.nn.utils.rnn.pad_sequence(
+            bracket_indices, batch_first=True).to(self._model_device)
+        unbracket_indices_batch = torch.nn.utils.rnn.pad_sequence(
+            unbracket_indices, batch_first=True).to(self._model_device)
+        segments_tensors_batch = torch.nn.utils.rnn.pad_sequence(
+            segments_tensors, batch_first=True).to(self._model_device)
+        attention_mask = torch.arange(max_len).view(1, -1).long()
+        attention_mask = (attention_mask < torch.tensor(seq_len)).long().to(self._model_device)
+
+        masked_dst_tensor_batch = dst_tensor_batch * bracket_indices_batch
+        masked_dst_tensor_batch[masked_dst_tensor_batch == 0] = -1  # -1 mask out irrelevant positions
+
+        loss = self.model(src_tensor_batch,
+                          token_type_ids=segments_tensors_batch,
+                          attention_mask=attention_mask,
+                          masked_lm_labels=masked_dst_tensor_batch)
+        return loss, dst_tensor_batch, bracket_indices_batch, unbracket_indices_batch
