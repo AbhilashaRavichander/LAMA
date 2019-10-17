@@ -268,8 +268,8 @@ class Bert(Base_Connector):
         # encoded-hidden-state is a torch.FloatTensor of size [batch_size, sequence_length, hidden_size]
         return all_encoder_layers, sentence_lengths, tokenized_text_list
 
-    def __get_input_tensors_for_rc(self, sentence: str, mask_source: bool = True):
-        tokenized_text, bracket_indices, unbracket_indices = self.tokenizer_for_rc(sentence)
+    def __get_one_tensor_with_mask(self, sentence: str, mask_source: bool = True):
+        tokenized_text, bracket_indices, unbracket_indices = self.tokenizer_with_mask(sentence)
         segment_id = np.zeros(len(tokenized_text), dtype=int).tolist()
 
         # add [SEP] token at the end
@@ -287,8 +287,8 @@ class Bert(Base_Connector):
         # mask out bracket
         if mask_source:
             for i, b in enumerate(bracket_indices):
-                if b:
-                    src_tokens[i] = MASK
+                src_tokens[i] = MASK if b else src_tokens[i]
+
         # convert to ids
         src_tokens = self.tokenizer.convert_tokens_to_ids(src_tokens)
         dst_tokens = self.tokenizer.convert_tokens_to_ids(tokenized_text)
@@ -300,38 +300,78 @@ class Bert(Base_Connector):
         unbracket_tensor = torch.tensor(unbracket_indices)
         segments_tensors = torch.tensor(segment_id)
 
-        return src_tensor, dst_tensor, bracket_tensor, unbracket_tensor, dst_tokens, segments_tensors
+        # mask out irrelevant positions
+        dst_tensor = dst_tensor * bracket_tensor
+        dst_tensor[dst_tensor == 0] = -1
 
-    def get_rc_loss(self, sentence_list: List[str], try_cuda: bool = False):
-        if try_cuda:
-            self.try_cuda()
+        return src_tensor, dst_tensor, bracket_tensor, unbracket_tensor, segments_tensors, dst_tokens
 
-        self.model.train()
-
-        src_tensor, dst_tensor, bracket_indices, unbracket_indices, tokenized_text, segments_tensors = \
-            zip(*[self.__get_input_tensors_for_rc(sentence, mask_source=True) for sentence in sentence_list])
-        seq_len = [s.size(0) for s in src_tensor]
+    def __get_batch_tensors_with_mask(self, sentence_list: List[str]):
+        src, dst, bracket, unbracket, segments, token_ids = \
+            zip(*[self.__get_one_tensor_with_mask(sentence, mask_source=True) for sentence in sentence_list])
+        seq_len = [s.size(0) for s in src]
         max_len = np.max(seq_len)
 
-        # SHAPE: (batch_size, seq_len)
-        src_tensor_batch = torch.nn.utils.rnn.pad_sequence(
-            src_tensor, batch_first=True, padding_value=self.pad_id).to(self._model_device)
-        dst_tensor_batch = torch.nn.utils.rnn.pad_sequence(
-            dst_tensor, batch_first=True).to(self._model_device)
-        bracket_indices_batch = torch.nn.utils.rnn.pad_sequence(
-            bracket_indices, batch_first=True).to(self._model_device)
-        unbracket_indices_batch = torch.nn.utils.rnn.pad_sequence(
-            unbracket_indices, batch_first=True).to(self._model_device)
-        segments_tensors_batch = torch.nn.utils.rnn.pad_sequence(
-            segments_tensors, batch_first=True).to(self._model_device)
+        src_batch = torch.nn.utils.rnn.pad_sequence(src, batch_first=True, padding_value=self.pad_id)
+        dst_batch = torch.nn.utils.rnn.pad_sequence(dst, batch_first=True, padding_value=-1)
+        bracket_batch = torch.nn.utils.rnn.pad_sequence(bracket, batch_first=True)
+        unbracket_batch = torch.nn.utils.rnn.pad_sequence(unbracket, batch_first=True)
+        segments_batch = torch.nn.utils.rnn.pad_sequence(segments, batch_first=True)
         attention_mask = torch.arange(max_len).view(1, -1).long()
-        attention_mask = (attention_mask < torch.tensor(seq_len)).long().to(self._model_device)
+        attention_mask = (attention_mask < torch.tensor(seq_len).unsqueeze(-1)).long()
 
-        masked_dst_tensor_batch = dst_tensor_batch * bracket_indices_batch
-        masked_dst_tensor_batch[masked_dst_tensor_batch == 0] = -1  # -1 mask out irrelevant positions
+        return src_batch, dst_batch, bracket_batch, unbracket_batch, segments_batch, attention_mask
 
-        loss = self.model(src_tensor_batch,
-                          token_type_ids=segments_tensors_batch,
+    def get_rc_loss(self, sentence_list: List[str], try_cuda: bool = False):
+        src, dst, bracket, unbracket, segments, attention_mask = self.__get_batch_tensors_with_mask(sentence_list)
+
+        if try_cuda:
+            self.try_cuda()
+            src = src.cuda()
+            dst = dst.cuda()
+            bracket = bracket.cuda()
+            unbracket = unbracket.cuda()
+            segments = segments.cuda()
+            attention_mask = attention_mask.cuda()
+
+        self.model.train()
+        loss = self.model(src,
+                          token_type_ids=segments,
                           attention_mask=attention_mask,
-                          masked_lm_labels=masked_dst_tensor_batch)
-        return loss, dst_tensor_batch, bracket_indices_batch, unbracket_indices_batch
+                          masked_lm_labels=dst)
+        return loss, dst, bracket, unbracket
+
+    def fill_cloze(self, sentence_list: List[str], try_cuda: bool = False):
+        src, dst, bracket, unbracket, segments, attention_mask = self.__get_batch_tensors_with_mask(sentence_list)
+
+        if try_cuda:
+            self.try_cuda()
+            src = src.cuda()
+            dst = dst.cuda()
+            bracket = bracket.cuda()
+            unbracket = unbracket.cuda()
+            segments = segments.cuda()
+            attention_mask = attention_mask.cuda()
+
+        self.model.eval()
+        # SHAPE: (batch_size, seq_len, vocab_size)
+        logits = self.model(src, token_type_ids=segments, attention_mask=attention_mask)
+        logits_argmax = logits.max(-1)[1]
+
+        acc_token = (logits_argmax.eq(dst).long() * bracket).sum().float() / (bracket.sum() + 1e-10).float()
+        acc_sent = (logits_argmax.eq(dst).long() * bracket).sum(-1).eq(bracket.sum(-1)).sum().float() / bracket.size(0)
+
+        '''
+        logits_argmax = logits_argmax.cpu().numpy()
+        dst = dst.cpu().numpy()
+        bracket = bracket.cpu().numpy()
+        for b in range(len(logits)):
+            ind = bracket[b] == 1
+            pred = logits_argmax[b][ind]
+            gold = dst[b][ind]
+            print(sentence_list[b])
+            print(self.tokenizer.convert_ids_to_tokens(pred))
+            print(self.tokenizer.convert_ids_to_tokens(gold))
+            input()
+        '''
+        return acc_token.item(), acc_sent.item()

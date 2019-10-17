@@ -11,6 +11,7 @@ import lama.options as options
 from lama.modules import base_connector
 from lama import attacks
 
+
 def main(args):
     try_cuda = torch.cuda.is_available()
 
@@ -81,8 +82,8 @@ def pattern_score(args, pattern_json, output_file):
             num_batch = np.ceil(len(occs) / batch_size)
             for b in range(0, len(occs), batch_size):
                 occs_batch = occs[b:b + batch_size]
-                sentences = ['{} {} ({})'.format(h, snippet, t) i
-                             f direction == 1 else '{} {} ({})'.format(t, snippet, h) for h, t in occs_batch]
+                sentences = ['{} {} ({})'.format(h, snippet, t)
+                             if direction == 1 else '{} {} ({})'.format(t, snippet, h) for h, t in occs_batch]
                 #print((snippet, direction), count)
                 #print(sentences)
                 #input()
@@ -98,6 +99,31 @@ def pattern_score(args, pattern_json, output_file):
             fout.write('{}\t{}\n'.format(pid, json.dumps(pats)))
 
 
+def fill_cloze(args, input_jsonl, batch_size):
+    try_cuda = torch.cuda.is_available()
+    model = build_model_by_name(args.models_names[0], args)
+    with open(input_jsonl, 'r') as fin:
+        data = [json.loads(l) for l in fin]
+        # only keep qa pairs (1) with uppercase initials (2) <= 200 chars
+        data = [d for d in data if d['answer'][0].isupper() and len(d['sentence']) <= 200]
+        print('#qa pairs {}'.format(len(data)))
+
+    acc_token_li, acc_sent_li = [], []
+    for b in tqdm(range(0, len(data), batch_size)):
+        data_batch = data[b:b + batch_size]
+        sents = []
+        for d in data_batch:
+            start = d['answer_start']
+            end = start + len(d['answer'])
+            sent = d['sentence'].replace('[', '(').replace(']', ')')
+            sent = sent[:start] + '[' + sent[start:end] + ']' + sent[end:]
+            sents.append(sent)
+        acc_token, acc_sent = model.fill_cloze(sents, try_cuda=try_cuda)
+        acc_token_li.append(acc_token)
+        acc_sent_li.append(acc_sent)
+    print('mean acc_token {}, mean acc_sent {}'.format(np.mean(acc_token_li), np.mean(acc_sent_li)))
+
+
 if __name__ == '__main__':
     np.random.seed(0)
     torch.random.manual_seed(0)
@@ -106,4 +132,5 @@ if __name__ == '__main__':
     parser = options.get_eval_generation_parser()
     args = options.parse_args(parser)
     #main(args)
-    pattern_score(args, 'patterns.json', 'output/patterns.txt')
+    #pattern_score(args, 'patterns.json', 'output/test.txt')
+    fill_cloze(args, '/home/zhengbaj/data/squad/train-v2.0.jsonl', batch_size=16)

@@ -183,7 +183,7 @@ class GPT(Base_Connector):
                 tokenized_text: A list of token string.
             """
         # Split the sentence by brackets and tokenize the chunks independently.
-        tokenized_text, bracket_indices, unbracket_indices = self.tokenizer_for_rc(sentence)
+        tokenized_text, bracket_indices, unbracket_indices = self.tokenizer_with_mask(sentence)
 
         full_indexed_tokens = [self.eos_id] + self.tokenizer.convert_tokens_to_ids(tokenized_text)
         bracket_indices = [0] + bracket_indices

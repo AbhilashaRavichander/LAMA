@@ -185,11 +185,11 @@ class Base_Connector():
     def zero_grad(self):
         self.model.zero_grad()
 
-    def tokenizer_for_rc(self, sentence: str):
+    def tokenizer_with_mask(self, sentence: str, split_pattern='\[|\]'):
         tokenized_text = []
         bracket_indices = []
         unbracket_indices = []
-        for chunk_idx, chunk in enumerate(re.split('\(|\)', sentence)):
+        for chunk_idx, chunk in enumerate(re.split(split_pattern, sentence)):
             chunk = chunk.strip()
             if chunk:
                 chunk_tokens = self.tokenizer.tokenize(chunk)
