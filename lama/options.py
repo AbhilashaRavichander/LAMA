@@ -65,6 +65,12 @@ def get_eval_generation_parser():
     return parser
 
 
+def get_rc_parser():
+    parser = get_general_parser()
+    parser.add_argument('--beam_size', type=int, default=16)
+    return parser
+
+
 def get_eval_KB_completion_parser():
     parser = get_general_parser()
     parser.add_argument(

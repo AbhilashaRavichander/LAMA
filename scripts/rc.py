@@ -5,6 +5,7 @@ sys.path.append('..')
 import json
 from collections import defaultdict
 from tqdm import tqdm
+import re
 
 from lama.modules import build_model_by_name
 import lama.options as options
@@ -99,13 +100,13 @@ def pattern_score(args, pattern_json, output_file):
             fout.write('{}\t{}\n'.format(pid, json.dumps(pats)))
 
 
-def fill_cloze(args, input_jsonl, batch_size):
+def fill_cloze(args, input_jsonl, batch_size, beam_size):
     try_cuda = torch.cuda.is_available()
     model = build_model_by_name(args.models_names[0], args)
     with open(input_jsonl, 'r') as fin:
         data = [json.loads(l) for l in fin]
-        # only keep qa pairs (1) with uppercase initials (2) <= 200 chars
-        data = [d for d in data if d['answer'][0].isupper() and len(d['sentence']) <= 200]
+        # only keep qa pairs (1) with uppercase initials (2) <= 200 chars (3) not contain number
+        data = [d for d in data if d['answer'][0].isupper() and len(d['sentence']) <= 200 and not bool(re.search(r'\d', d['sentence']))]
         print('#qa pairs {}'.format(len(data)))
 
     acc_token_li, acc_sent_li = [], []
@@ -118,9 +119,10 @@ def fill_cloze(args, input_jsonl, batch_size):
             sent = d['sentence'].replace('[', '(').replace(']', ')')
             sent = sent[:start] + '[' + sent[start:end] + ']' + sent[end:]
             sents.append(sent)
-        acc_token, acc_sent = model.fill_cloze(sents, try_cuda=try_cuda)
+        acc_token, acc_sent = model.fill_cloze(sents, try_cuda=try_cuda, beam_size=beam_size)
         acc_token_li.append(acc_token)
         acc_sent_li.append(acc_sent)
+        #print(acc_token, acc_sent)
     print('mean acc_token {}, mean acc_sent {}'.format(np.mean(acc_token_li), np.mean(acc_sent_li)))
 
 
@@ -129,8 +131,8 @@ if __name__ == '__main__':
     torch.random.manual_seed(0)
     torch.cuda.manual_seed(0)
 
-    parser = options.get_eval_generation_parser()
+    parser = options.get_rc_parser()
     args = options.parse_args(parser)
     #main(args)
     #pattern_score(args, 'patterns.json', 'output/test.txt')
-    fill_cloze(args, '/home/zhengbaj/data/squad/train-v2.0.jsonl', batch_size=16)
+    fill_cloze(args, '/home/zhengbaj/data/squad/train-v2.0.jsonl', batch_size=1, beam_size=args.beam_size)
