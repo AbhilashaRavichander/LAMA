@@ -279,7 +279,7 @@ class GPT(Base_Connector):
             logits_argmax = src_[ind]
 
             acc_token = (logits_argmax.eq(dst).long() * bracket).sum().float() / (bracket.sum() + 1e-10).float()
-            acc_sent = (logits_argmax.eq(dst).long() * bracket).sum(-1).eq(bracket.sum(-1)).sum().float() / bracket.size(0)
+            acc_sent = (logits_argmax.eq(dst).long() * bracket).sum().eq(bracket.sum()).float()
             acc_token_li.append(acc_token.item())
             acc_sent_li.append(acc_sent.item())
             '''

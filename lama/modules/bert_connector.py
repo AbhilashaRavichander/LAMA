@@ -341,7 +341,7 @@ class Bert(Base_Connector):
                           masked_lm_labels=dst)
         return loss, dst, bracket, unbracket
 
-    def fill_cloze(self, sentence_list: List[str], try_cuda: bool = False):
+    def fill_cloze(self, sentence_list: List[str], try_cuda: bool = False, beam_size: int = 1):
         src, dst, bracket, unbracket, segments, attention_mask = self.__get_batch_tensors_with_mask(sentence_list)
 
         if try_cuda:

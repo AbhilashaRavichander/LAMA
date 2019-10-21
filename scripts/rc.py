@@ -126,6 +126,44 @@ def fill_cloze(args, input_jsonl, batch_size, beam_size):
     print('mean acc_token {}, mean acc_sent {}'.format(np.mean(acc_token_li), np.mean(acc_sent_li)))
 
 
+def fill_cloze_lama_squad(args, input_jsonl, batch_size, beam_size):
+    try_cuda = torch.cuda.is_available()
+    model = build_model_by_name(args.models_names[0], args)
+    with open(input_jsonl, 'r') as fin:
+        data = [json.loads(l) for l in fin]
+        print('#qa pairs {}'.format(len(data)))
+
+    acc_token_li, acc_sent_li = [], []
+    for b in tqdm(range(0, len(data), batch_size)):
+        data_batch = data[b:b + batch_size]
+        sents = []
+        for d in data_batch:
+            sents.append(d['masked_sentences'][0].replace('[MASK]', '[{}]'.format(d['obj_label'])))
+        acc_token, acc_sent = model.fill_cloze(sents, try_cuda=try_cuda, beam_size=beam_size)
+        acc_token_li.append(acc_token)
+        acc_sent_li.append(acc_sent)
+        #print(acc_token, acc_sent)
+    print('mean acc_token {}, mean acc_sent {}'.format(np.mean(acc_token_li), np.mean(acc_sent_li)))
+
+
+def fill_cloze_webquestion(args, input_file, batch_size, beam_size):
+    try_cuda = torch.cuda.is_available()
+    model = build_model_by_name(args.models_names[0], args)
+    with open(input_file, 'r') as fin:
+        # keep statement based on number of words in the answer
+        sents = [l.strip() for l in fin]
+        sents = [s for s in sents if len(re.split('\[|\]', s)[1].split()) == 1]
+        print('#qa pairs {}'.format(len(sents)))
+
+    acc_token_li, acc_sent_li = [], []
+    for b in tqdm(range(0, len(sents), batch_size)):
+        acc_token, acc_sent = model.fill_cloze(sents[b:b + batch_size], try_cuda=try_cuda, beam_size=beam_size)
+        acc_token_li.append(acc_token)
+        acc_sent_li.append(acc_sent)
+        #print(acc_token, acc_sent)
+    print('mean acc_token {}, mean acc_sent {}'.format(np.mean(acc_token_li), np.mean(acc_sent_li)))
+
+
 if __name__ == '__main__':
     np.random.seed(0)
     torch.random.manual_seed(0)
@@ -135,4 +173,9 @@ if __name__ == '__main__':
     args = options.parse_args(parser)
     #main(args)
     #pattern_score(args, 'patterns.json', 'output/test.txt')
-    fill_cloze(args, '/home/zhengbaj/data/squad/train-v2.0.jsonl', batch_size=1, beam_size=args.beam_size)
+    #fill_cloze(args, '/home/zhengbaj/data/squad/train-v2.0.jsonl',
+    #           batch_size=args.batch_size, beam_size=args.beam_size)
+    #fill_cloze_lama_squad(args, 'data/Squad/test.jsonl',
+    #                      batch_size=args.batch_size, beam_size=args.beam_size)
+    fill_cloze_webquestion(args, '/home/zhengbaj/data/webquestion/statement.txt',
+                           batch_size=args.batch_size, beam_size=args.beam_size)

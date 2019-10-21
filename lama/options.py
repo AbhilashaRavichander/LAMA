@@ -68,6 +68,7 @@ def get_eval_generation_parser():
 def get_rc_parser():
     parser = get_general_parser()
     parser.add_argument('--beam_size', type=int, default=16)
+    parser.add_argument('--batch_size', type=int, default=32)
     return parser
 
 
