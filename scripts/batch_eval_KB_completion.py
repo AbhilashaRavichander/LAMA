@@ -129,7 +129,7 @@ def run_thread(arguments):
         label_index=arguments["label_index"],
         index_list=arguments["index_list"],
         print_generation=arguments["interactive"],
-        topk=10000,
+        topk=1,  # TODO: only use top 1 to increase speed
     )
     msg += "\n" + return_msg
 
@@ -311,6 +311,8 @@ def main(args, shuffle_data=True, model=None):
     Precision_negative = 0.0
     Precision_positivie = 0.0
 
+    P1_li = []
+
     data = load_file(args.dataset_filename)
 
     print(len(data))
@@ -487,6 +489,7 @@ def main(args, shuffle_data=True, model=None):
             MRR += sample_MRR
             Precision += sample_P
             Precision1 += element["sample_Precision1"]
+            P1_li.append(element["sample_Precision1"])
 
             # the judgment of the annotators recording whether they are
             # evidence in the sentence that indicates a relation between two entities.
@@ -556,6 +559,8 @@ def main(args, shuffle_data=True, model=None):
     )
     with open("{}/result.pkl".format(log_directory), "wb") as f:
         pickle.dump(all_results, f)
+
+    print('P1all {}'.format('\t'.join(map(str, P1_li))))
 
     return Precision1
 

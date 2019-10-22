@@ -34,9 +34,13 @@ class TransformerXL(Base_Connector):
         self.unk_symbol = self.UNK_SYMBOL
 
         # Load pre-trained model (weights)
-        self.model = TransfoXLLMHeadModel.from_pretrained(model_name)
-        self.model.eval()
-        print(self.model.config)
+        self.txl_model = TransfoXLLMHeadModel.from_pretrained(model_name)
+        self.txl_model.eval()
+        print(self.txl_model.config)
+
+    @property
+    def model(self):
+        return self.txl_model
 
     def _cuda(self):
         self.model.cuda()
