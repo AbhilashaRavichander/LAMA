@@ -200,6 +200,14 @@ def get_relation_phrase_parameters(args):
     return relations, data_path_pre, data_path_post
 
 
+def get_test_phrase_parameters(args):
+    #relations = [{'relation': 'P27', 'template': '[X] what a terrorist incident in [Y] .'}]
+    relations = [{'relation': 'P27', 'template': '[X] is an [Y] citizen .'}]
+    data_path_pre = "data/TREx/"
+    data_path_post = ".jsonl"
+    return relations, data_path_pre, data_path_post
+
+
 def get_ConceptNet_parameters(data_path_pre="data/"):
     relations = [{"relation": "test"}]
     data_path_pre += "ConceptNet/"
@@ -242,7 +250,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='run exp for multiple relational phrase')
     parser.add_argument('--rel_file', type=str, default='data/Google_RE_patty_template/place_of_death.jsonl')
     parser.add_argument('--prefix', type=str, default='data/Google_RE/')
-    parser.add_argument('--suffix', type=str, help='_test.jsonl')
+    parser.add_argument('--suffix', type=str, default='_test.jsonl')
     args = parser.parse_args()
     parameters = get_relation_phrase_parameters(args)
+    #parameters = get_test_phrase_parameters(args)
     run_all_LMs(parameters)

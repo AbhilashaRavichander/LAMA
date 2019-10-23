@@ -15,12 +15,18 @@ def out_ana(args):
                 templates.append(eval(l.strip())['template'])
     stat = np.array(stat)
     first = np.mean(stat[0])  # the first template is manually designed
-    temp_scores = np.mean(stat[1:], -1)
-    best = np.argmax(temp_scores)  # the best template (except for the manually designed one)
-    ensemble = np.mean(np.max(stat, 0))  # ensemble all the templates
-    print('first tempate: {}'.format(templates[0]))
-    print('best template: {}'.format(templates[best + 1]))
-    print('first {}, best {}, ensemble {}'.format(first, temp_scores[best], ensemble))
+    ensemble_score = np.mean(np.max(stat, 0))  # ensemble all the templates
+    if len(stat) > 1:
+        temp_scores = np.mean(stat[1:], -1)
+        best = np.argmax(temp_scores)  # the best template (except for the manually designed one)
+        best_temp = templates[best + 1]
+        best_score = temp_scores[best]
+    else:
+        best_temp = None
+        best_score = 0
+    print('first template: {}'.format(templates[0]))
+    print('best template: {}'.format(best_temp))
+    print('first {:.3f}, best {:.3f}, ensemble {:.3f}'.format(first, best_score, ensemble_score))
 
 
 def wikidata_to_trex(args):

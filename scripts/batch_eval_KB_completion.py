@@ -491,6 +491,15 @@ def main(args, shuffle_data=True, model=None):
             Precision1 += element["sample_Precision1"]
             P1_li.append(element["sample_Precision1"])
 
+            '''
+            if element["sample_Precision1"] == 1:
+                print(element["sample"])
+                input(1)
+            else:
+                print(element["sample"])
+                input(0)
+            '''
+
             # the judgment of the annotators recording whether they are
             # evidence in the sentence that indicates a relation between two entities.
             num_yes = 0
