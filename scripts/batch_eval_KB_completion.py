@@ -64,8 +64,8 @@ def bracket_relational_phrase(template, subject_label, object_label):
     start_ind = min(sub_ind, obj_ind) + len(SUBJ_SYMBOL)
     end_ind = max(sub_ind, obj_ind)
     template = template[:start_ind] + ' [ ' + template[start_ind:end_ind] + ' ] ' + template[end_ind:]
-    template = template.replace(SUBJ_SYMBOL, subject_label)
-    template = template.replace(OBJ_SYMBOL, object_label)
+    template = template.replace(SUBJ_SYMBOL, subject_label.replace('[', '(').replace(']', ')'))
+    template = template.replace(OBJ_SYMBOL, object_label.replace('[', '(').replace(']', ')'))
     return template
 
 
