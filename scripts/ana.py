@@ -26,7 +26,8 @@ def out_ana(args):
         best_score = 0
     print('first template: {}'.format(templates[0]))
     print('best template: {}'.format(best_temp))
-    print('first {:.3f}, best {:.3f}, ensemble {:.3f}'.format(first, best_score, ensemble_score))
+    print('first {:.3f}, best {:.3f}, allbest {:.3f}, ensemble {:.3f}, numtemp {}'.format(
+        first, best_score, max(first, best_score), ensemble_score, len(templates)))
 
 
 def wikidata_to_trex(args):
