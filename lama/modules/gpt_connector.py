@@ -179,6 +179,7 @@ class GPT(Base_Connector):
         unbracket = [0] + unbracket
         src_tensor = torch.tensor(token_ids)
         dst_tensor = torch.tensor(token_ids)
+        token_ids = torch.tensor(token_ids)
         bracket_tensor = torch.tensor(bracket)
         unbracket_tensor = torch.tensor(unbracket)
         dst_tensor = dst_tensor * bracket_tensor
@@ -195,11 +196,12 @@ class GPT(Base_Connector):
         dst_batch = torch.nn.utils.rnn.pad_sequence(dst, padding_value=-1, batch_first=True)
         bracket_batch = torch.nn.utils.rnn.pad_sequence(bracket, batch_first=True)
         unbracket_batch = torch.nn.utils.rnn.pad_sequence(unbracket, batch_first=True)
+        token_ids_batch = torch.nn.utils.rnn.pad_sequence(token_ids, padding_value=-1, batch_first=True)
 
-        return src_batch, dst_batch, bracket_batch, unbracket_batch, token_ids
+        return src_batch, dst_batch, bracket_batch, unbracket_batch, token_ids_batch
 
     def get_rc_loss(self, sentence_list: List[str], try_cuda: bool = False):
-        src, dst, bracket, unbracket, _ = self.__get_batch_tensors_with_mask(sentence_list)
+        src, dst, bracket, unbracket, token_ids = self.__get_batch_tensors_with_mask(sentence_list)
 
         if try_cuda:
             self.try_cuda()
@@ -207,10 +209,11 @@ class GPT(Base_Connector):
             dst = dst.cuda()
             bracket = bracket.cuda()
             unbracket = unbracket.cuda()
+            token_ids = token_ids.cuda()
 
         self.model.eval()
         loss = self.model(src, lm_labels=dst)
-        return loss, dst, bracket, unbracket
+        return loss, token_ids, bracket, unbracket
 
     def fill_cloze(self, sentence_list: List[str], try_cuda: bool = False, beam_size: int = 5, bbatch_size: int = 16):
         acc_token_li, acc_sent_li = [], []

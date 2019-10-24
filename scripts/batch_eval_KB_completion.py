@@ -56,6 +56,30 @@ def parse_template(template, subject_label, object_label):
     return [template]
 
 
+def bracket_relational_phrase(template, subject_label, object_label):
+    SUBJ_SYMBOL = "[X]"
+    OBJ_SYMBOL = "[Y]"
+    sub_ind = template.find(SUBJ_SYMBOL)
+    obj_ind = template.find(OBJ_SYMBOL)
+    start_ind = min(sub_ind, obj_ind) + len(SUBJ_SYMBOL)
+    end_ind = max(sub_ind, obj_ind)
+    template = template[:start_ind] + ' [ ' + template[start_ind:end_ind] + ' ] ' + template[end_ind:]
+    template = template.replace(SUBJ_SYMBOL, subject_label)
+    template = template.replace(OBJ_SYMBOL, object_label)
+    return template
+
+
+def replace_template(old_template, new_relational_phrase):
+    SUBJ_SYMBOL = "[X]"
+    OBJ_SYMBOL = "[Y]"
+    sub_ind = old_template.find(SUBJ_SYMBOL)
+    obj_ind = old_template.find(OBJ_SYMBOL)
+    start_ind = min(sub_ind, obj_ind) + len(SUBJ_SYMBOL)
+    end_ind = max(sub_ind, obj_ind)
+    template = old_template[:start_ind] + ' ' + new_relational_phrase + ' ' + old_template[end_ind:]
+    return template
+
+
 def init_logging(log_directory):
     logger = logging.getLogger("LAMA")
     logger.setLevel(logging.DEBUG)
@@ -86,7 +110,7 @@ def init_logging(log_directory):
     return logger
 
 
-def batchify(data, batch_size):
+def batchify(data, batch_size, key='masked_sentences'):
     msg = ""
     list_samples_batches = []
     list_sentences_batches = []
@@ -96,9 +120,9 @@ def batchify(data, batch_size):
 
     # sort to group togheter sentences with similar length
     for sample in sorted(
-        data, key=lambda k: len(" ".join(k["masked_sentences"]).split())
+        data, key=lambda k: len(" ".join(k[key]).split())
     ):
-        masked_sentences = sample["masked_sentences"]
+        masked_sentences = sample[key]
         current_samples_batch.append(sample)
         current_sentences_batches.append(masked_sentences)
         c += 1
@@ -245,7 +269,7 @@ def filter_samples(model, samples, vocab_subset, max_sentence_length, template):
     return new_samples, msg
 
 
-def main(args, shuffle_data=True, model=None):
+def main(args, shuffle_data=True, model=None, refine_template=False):
 
     if len(args.models_names) > 1:
         raise ValueError('Please specify a single language model (e.g., --lm "bert").')
@@ -360,6 +384,11 @@ def main(args, shuffle_data=True, model=None):
             sample["masked_sentences"] = parse_template(
                 args.template.strip(), sample["sub_label"].strip(), base.MASK
             )
+            # substitute sub and obj placeholder in template with corresponding str
+            # and add bracket to the relational phrase
+            sample['bracket_sentences'] = bracket_relational_phrase(
+                args.template.strip(), sample['sub_label'].strip(), sample['obj_label'].strip()
+            )
             all_samples.append(sample)
 
     # create uuid if not present
@@ -375,6 +404,14 @@ def main(args, shuffle_data=True, model=None):
 
     samples_batches, sentences_batches, ret_msg = batchify(all_samples, args.batch_size)
     logger.info("\n" + ret_msg + "\n")
+
+    if refine_template:
+        bracket_sentences = [sample['bracket_sentences'] for sample in all_samples]
+        new_temp = model.refine_cloze(bracket_sentences, batch_size=32, try_cuda=True)
+        new_temp = replace_template(args.template.strip(), ' '.join(new_temp))
+        print('old temp: {}'.format(args.template.strip()))
+        print('new temp: {}'.format(new_temp))
+        return new_temp
 
     # ThreadPool
     num_threads = args.threads

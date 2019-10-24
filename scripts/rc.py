@@ -29,6 +29,9 @@ def main(args):
 
     sentences = ['Him (speaks English.)']
 
+    sentences = ['[The theory of relativity was] killed [by Einstein].',
+                 '[Windows was] killed [by Microsoft].']
+
     for _ in range(50):
         for token_to_flip in range(0, 3):  # TODO: for each token in the trigger
             # back propagation
@@ -50,7 +53,7 @@ def main(args):
             grad = grad.masked_select(unbracket_mask.unsqueeze(-1)).view(bs, -1, emb_dim)
             # SHAPE: (1, emb_dim)
             grad = grad.sum(dim=0)[token_to_flip].unsqueeze(0)
-            print(grad)
+            print((grad * grad).sum().sqrt())
 
             # SHAPE: (batch_size, unbracket_len)
             tokens = tokens.masked_select(unbracket_mask).view(bs, -1)
@@ -164,6 +167,13 @@ def fill_cloze_webquestion(args, input_file, batch_size, beam_size):
     print('mean acc_token {}, mean acc_sent {}'.format(np.mean(acc_token_li), np.mean(acc_sent_li)))
 
 
+def refine_cloze(args):
+    try_cuda = torch.cuda.is_available()
+    model = build_model_by_name(args.models_names[0], args)
+    sents = ['The theory of relativity [ is killed by ] Einstein .', 'Windows [ is killed by ] Microsoft .']
+    model.refine_cloze(sents, try_cuda=try_cuda)
+
+
 if __name__ == '__main__':
     np.random.seed(0)
     torch.random.manual_seed(0)
@@ -177,5 +187,6 @@ if __name__ == '__main__':
     #           batch_size=args.batch_size, beam_size=args.beam_size)
     #fill_cloze_lama_squad(args, 'data/Squad/test.jsonl',
     #                      batch_size=args.batch_size, beam_size=args.beam_size)
-    fill_cloze_webquestion(args, '/home/zhengbaj/data/webquestion/statement.txt',
-                           batch_size=args.batch_size, beam_size=args.beam_size)
+    #fill_cloze_webquestion(args, '/home/zhengbaj/data/webquestion/statement.txt',
+    #                       batch_size=args.batch_size, beam_size=args.beam_size)
+    refine_cloze(args)

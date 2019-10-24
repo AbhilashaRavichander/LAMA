@@ -299,6 +299,7 @@ class Bert(Base_Connector):
         bracket_tensor = torch.tensor(bracket_indices)
         unbracket_tensor = torch.tensor(unbracket_indices)
         segments_tensors = torch.tensor(segment_id)
+        dst_tokens = torch.tensor(dst_tokens)
 
         # mask out irrelevant positions
         dst_tensor = dst_tensor * bracket_tensor
@@ -317,13 +318,15 @@ class Bert(Base_Connector):
         bracket_batch = torch.nn.utils.rnn.pad_sequence(bracket, batch_first=True)
         unbracket_batch = torch.nn.utils.rnn.pad_sequence(unbracket, batch_first=True)
         segments_batch = torch.nn.utils.rnn.pad_sequence(segments, batch_first=True)
+        token_ids = torch.nn.utils.rnn.pad_sequence(token_ids, batch_first=True, padding_value=-1)
         attention_mask = torch.arange(max_len).view(1, -1).long()
         attention_mask = (attention_mask < torch.tensor(seq_len).unsqueeze(-1)).long()
 
-        return src_batch, dst_batch, bracket_batch, unbracket_batch, segments_batch, attention_mask
+        return src_batch, dst_batch, bracket_batch, unbracket_batch, segments_batch, attention_mask, token_ids
 
     def get_rc_loss(self, sentence_list: List[str], try_cuda: bool = False):
-        src, dst, bracket, unbracket, segments, attention_mask = self.__get_batch_tensors_with_mask(sentence_list)
+        src, dst, bracket, unbracket, segments, attention_mask, token_ids = \
+            self.__get_batch_tensors_with_mask(sentence_list)
 
         if try_cuda:
             self.try_cuda()
@@ -333,16 +336,111 @@ class Bert(Base_Connector):
             unbracket = unbracket.cuda()
             segments = segments.cuda()
             attention_mask = attention_mask.cuda()
+            token_ids = token_ids.cuda()
 
         self.model.train()
         loss = self.model(src,
                           token_type_ids=segments,
                           attention_mask=attention_mask,
                           masked_lm_labels=dst)
-        return loss, dst, bracket, unbracket
+        return loss, token_ids, bracket, unbracket
+
+    def refine_cloze(self, sentence_list: List[str], try_cuda: bool = False, batch_size: int = 32, beam_size: int = 1, max_try: int = 10):
+        tokenized_sent_list = []
+        start_ind = []  # inclusive
+        end_ind = []  # exclusive
+        for sent in sentence_list:
+            tokenized_sent = []
+            ind = 0
+            for w in re.split(' ', sent):
+                if not w:
+                    continue
+                if w == '[':
+                    start_ind.append(ind)
+                elif w == ']':
+                    end_ind.append(ind)
+                else:
+                    tokenized_sent.append(w)
+                    ind += 1
+            tokenized_sent_list.append(tokenized_sent)
+        cloze_len = np.unique(np.array(end_ind) - np.array(start_ind))
+        assert len(cloze_len) == 1, 'cloze do not have the same length'
+        cloze_len = cloze_len[0]
+
+        def bracket_token_at(sent: List[str], pos: int):
+            new_sent = deepcopy(sent)
+            new_sent.insert(pos, '[')
+            new_sent.insert(pos + 2, ']')
+            return new_sent
+
+        try_num = 0
+        while True:
+            modify_num = 0
+            for i in range(cloze_len):
+                # SHAPE: (one token len, vocab_size)
+                probs_sum = 0
+
+                for batch_ind in range(0, len(tokenized_sent_list), batch_size):
+                    cur_sent_list = tokenized_sent_list[batch_ind:batch_ind + batch_size]
+                    cur_start_ind = start_ind[batch_ind:batch_ind + batch_size]
+                    new_sent_list = [' '.join(bracket_token_at(ts, cur_start_ind[sid] + i)) for sid, ts in enumerate(cur_sent_list)]
+                    src, dst, bracket, unbracket, segments, attention_mask, _ = self.__get_batch_tensors_with_mask(new_sent_list)
+
+                    if try_cuda:
+                        self.try_cuda()
+                        src = src.cuda()
+                        dst = dst.cuda()
+                        bracket = bracket.cuda()
+                        unbracket = unbracket.cuda()
+                        segments = segments.cuda()
+                        attention_mask = attention_mask.cuda()
+
+                    # run model
+                    self.model.eval()
+                    # SHAPE: (batch_size, seq_len, vocab_size)
+                    probs = F.softmax(self.model(src, token_type_ids=segments, attention_mask=attention_mask), -1)
+                    # SHAPE: (batch_size, one token len, vocab_size)
+                    probs = probs.masked_select(bracket.eq(1).unsqueeze(-1)).view(probs.size(0), -1, probs.size(-1))
+                    probs_sum = probs_sum + probs.sum(0).detach()
+
+                # SHAPE: (one token len)
+                replace = probs_sum.max(-1)[1]
+                replace = self.tokenizer.convert_ids_to_tokens(replace.cpu().numpy())
+                if len(replace) > 1:
+                    '''
+                    dst[dst == -1] = 0
+                    print(new_sent_list)
+                    print(self.tokenizer.convert_ids_to_tokens(src[0].cpu().numpy()))
+                    print(self.tokenizer.convert_ids_to_tokens(dst[0].cpu().numpy()))
+                    print(replace, tokenized_sent_list[0][start_ind[0] + i])
+                    input()
+                    '''
+                    replace = ''.join(replace)
+                    #raise Exception('one token splitted into multiple pieces')
+                else:
+                    #assert len(replace) == 1, 'one token splitted into multiple pieces'
+                    replace = replace[0]
+                old = tokenized_sent_list[0][start_ind[0] + i]
+
+                # replace tokens
+                if old != replace:
+                    modify_num += 1
+                    print('modify {} to {}'.format(old, replace))
+                    for sid, ts in enumerate(tokenized_sent_list):
+                        ts[start_ind[sid] + i] = replace
+
+            if modify_num == 0:
+                break
+            try_num += 1
+            if try_num >= max_try:
+                print('max try reached')
+                break
+
+        new_cloze = [tokenized_sent_list[0][start_ind[0] + i] for i in range(cloze_len)]
+        return new_cloze
 
     def fill_cloze(self, sentence_list: List[str], try_cuda: bool = False, beam_size: int = 1):
-        src, dst, bracket, unbracket, segments, attention_mask = self.__get_batch_tensors_with_mask(sentence_list)
+        src, dst, bracket, unbracket, segments, attention_mask, _ = self.__get_batch_tensors_with_mask(sentence_list)
 
         if try_cuda:
             self.try_cuda()

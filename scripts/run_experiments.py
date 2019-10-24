@@ -10,6 +10,8 @@ from batch_eval_KB_completion import load_file
 from lama.modules import build_model_by_name
 import pprint
 import statistics
+from copy import deepcopy
+import json
 from os import listdir
 import os
 from os.path import isfile, join
@@ -85,6 +87,7 @@ def run_experiments(
     relations,
     data_path_pre,
     data_path_post,
+    refine_template,
     input_param={
         "lm": "bert",
         "label": "bert_large",
@@ -101,6 +104,11 @@ def run_experiments(
     type_count = defaultdict(list)
 
     results_file = open("last_results.csv", "w+")
+
+    if refine_template:
+        refine_temp_fout = open(refine_template, 'w')
+        new_relations = []
+        templates_set = set()
 
     for relation in relations:
         pp.pprint(relation)
@@ -142,7 +150,20 @@ def run_experiments(
             [model_type_name] = args.models_names
             model = build_model_by_name(model_type_name, args)
 
-        Precision1 = run_evaluation(args, shuffle_data=False, model=model)
+        Precision1 = run_evaluation(args, shuffle_data=False, model=model, refine_template=bool(refine_template))
+
+        if refine_template and Precision1 is not None:
+            if Precision1 in templates_set:
+                continue
+            templates_set.add(Precision1)
+            new_relation = deepcopy(relation)
+            new_relation['old_template'] = new_relation['template']
+            new_relation['template'] = Precision1
+            new_relations.append(new_relation)
+            refine_temp_fout.write(json.dumps(new_relation) + '\n')
+            refine_temp_fout.flush()
+            continue
+
         print("P@1 : {}".format(Precision1), flush=True)
         all_Precision1.append(Precision1)
 
@@ -155,6 +176,10 @@ def run_experiments(
             type_Precision1[relation["type"]].append(Precision1)
             data = load_file(PARAMETERS["dataset_filename"])
             type_count[relation["type"]].append(len(data))
+
+    if refine_template:
+        refine_temp_fout.close()
+        return
 
     mean_p1 = statistics.mean(all_Precision1)
     print("@@@ {} - mean P@1: {}".format(input_param["label"], mean_p1))
@@ -197,7 +222,8 @@ def get_relation_phrase_parameters(args):
     relations = load_file(args.rel_file)
     data_path_pre = args.prefix
     data_path_post = args.suffix
-    return relations, data_path_pre, data_path_post
+    refine_template = args.refine_template
+    return relations, data_path_pre, data_path_post, refine_template
 
 
 def get_test_phrase_parameters(args):
@@ -249,6 +275,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='run exp for multiple relational phrase')
     parser.add_argument('--rel_file', type=str, default='data/Google_RE_patty_template/place_of_death.jsonl')
+    parser.add_argument('--refine_template', type=str, default=None)
     parser.add_argument('--prefix', type=str, default='data/Google_RE/')
     parser.add_argument('--suffix', type=str, default='_test.jsonl')
     args = parser.parse_args()
