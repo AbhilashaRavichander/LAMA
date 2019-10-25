@@ -369,6 +369,8 @@ class Bert(Base_Connector):
 
         def bracket_token_at(sent: List[str], pos: int):
             new_sent = deepcopy(sent)
+            # replace the token at pos with a single character to avoid it being splitted into multiple pieces
+            new_sent[pos] = 'a'
             new_sent.insert(pos, '[')
             new_sent.insert(pos + 2, ']')
             return new_sent

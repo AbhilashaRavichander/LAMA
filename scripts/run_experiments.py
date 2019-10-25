@@ -228,10 +228,13 @@ def get_relation_phrase_parameters(args):
 
 def get_test_phrase_parameters(args):
     #relations = [{'relation': 'P27', 'template': '[X] what a terrorist incident in [Y] .'}]
-    relations = [{'relation': 'P27', 'template': '[X] is an [Y] citizen .'}]
+    #relations = [{'relation': 'P27', 'template': '[X] is an [Y] citizen .'}]
+    #relations = [{"relation": "P1001", "template": "[X] is the first,,,,andandthe President of [Y] .", "label": None, "description": None, "type": "N-M", "wikipedia_count": 21, "old_template": "[X] in the australian state of [Y] ."}]
+    relations = [{"relation": "P1001", "template": "[X] in the australian state of [Y] ."}]
     data_path_pre = "data/TREx/"
     data_path_post = ".jsonl"
-    return relations, data_path_pre, data_path_post
+    refine_template = 'test.out'
+    return relations, data_path_pre, data_path_post, refine_template
 
 
 def get_ConceptNet_parameters(data_path_pre="data/"):
