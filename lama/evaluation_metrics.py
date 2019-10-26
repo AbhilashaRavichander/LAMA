@@ -35,17 +35,10 @@ def __print_top_k(value_max_probs, index_max_probs, vocab, mask_topk, index_list
     return result, msg
 
 
-def get_ranking(log_probs, masked_indices, vocab, label_index = None, index_list = None, topk = 1000, P_AT = 10, print_generation=True):
-
+def get_ranking(log_probs, vocab, label_index = None, index_list = None, topk = 1000, P_AT = 10, print_generation=True):
     experiment_result = {}
 
-    # score only first mask
-    masked_indices = masked_indices[:1]
-
-    masked_index = masked_indices[0]
-    log_probs = log_probs[masked_index]
-
-    value_max_probs, index_max_probs = torch.topk(input=log_probs,k=topk,dim=0)
+    value_max_probs, index_max_probs = torch.topk(input=log_probs, k=topk, dim=0)
     index_max_probs = index_max_probs.numpy().astype(int)
     value_max_probs = value_max_probs.detach().numpy()
 
@@ -67,7 +60,7 @@ def get_ranking(log_probs, masked_indices, vocab, label_index = None, index_list
             label_index = index_list.index(label_index)
 
         query = torch.full(value_max_probs.shape, label_index, dtype=torch.long).numpy().astype(int)
-        ranking_position = (index_max_probs==query).nonzero()
+        ranking_position = (index_max_probs == query).nonzero()
 
         # LABEL PERPLEXITY
         tokens = torch.from_numpy(np.asarray(label_index))
@@ -77,13 +70,13 @@ def get_ranking(log_probs, masked_indices, vocab, label_index = None, index_list
         )
         PERPLEXITY = label_perplexity.item()
 
-        if len(ranking_position) >0 and ranking_position[0].shape[0] != 0:
+        if len(ranking_position) > 0 and ranking_position[0].shape[0] != 0:
             rank = ranking_position[0][0] + 1
 
             # print("rank: {}".format(rank))
 
             if rank >= 0:
-                MRR = (1/rank)
+                MRR = (1 / rank)
             if rank >= 0 and rank <= P_AT:
                 P_AT_X = 1.
             if rank == 1:
@@ -100,3 +93,13 @@ def get_ranking(log_probs, masked_indices, vocab, label_index = None, index_list
     # print("PERPLEXITY: {}".format(experiment_result["PERPLEXITY"]))
 
     return MRR, P_AT_X, experiment_result, return_msg
+
+
+def get_ranking_select(log_probs, masked_indices, vocab, label_index = None, index_list = None, topk = 1000, P_AT = 10, print_generation=True):
+    # score only first mask
+    masked_indices = masked_indices[:1]
+
+    masked_index = masked_indices[0]
+    log_probs = log_probs[masked_index]
+
+    return get_ranking(log_probs, vocab, label_index=label_index, index_list=index_list, topk=topk, P_AT=P_AT, print_generation=print_generation)

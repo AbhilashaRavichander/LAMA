@@ -22,6 +22,7 @@ from multiprocessing.pool import ThreadPool
 import multiprocessing
 import lama.evaluation_metrics as metrics
 import time, sys
+import numpy as np
 
 
 def load_file(filename):
@@ -148,7 +149,6 @@ def run_thread(arguments):
     # 1. compute the ranking metrics on the filtered log_probs tensor
     sample_MRR, sample_P, experiment_result, return_msg = metrics.get_ranking(
         arguments["filtered_log_probs"],
-        arguments["masked_indices"],
         arguments["vocab"],
         label_index=arguments["label_index"],
         index_list=arguments["index_list"],
@@ -362,56 +362,61 @@ def main(args, shuffle_data=True, model=None, refine_template=False):
     logger.info("\n" + ret_msg + "\n")
 
     print(len(all_samples))
+    perm = np.random.permutation(len(all_samples))
 
-    # if template is active (1) use a single example for (sub,obj) and (2) ...
-    if args.template and args.template != "":
-        facts = []
-        for sample in all_samples:
-            sub = sample["sub_label"]
-            obj = sample["obj_label"]
-            if (sub, obj) not in facts:
-                facts.append((sub, obj))
-        local_msg = "distinct template facts: {}".format(len(facts))
-        logger.info("\n" + local_msg + "\n")
-        print(local_msg)
-        all_samples = []
-        for fact in facts:
-            (sub, obj) = fact
-            sample = {}
-            sample["sub_label"] = sub
-            sample["obj_label"] = obj
-            # sobstitute all sentences with a standard template
-            sample["masked_sentences"] = parse_template(
-                args.template.strip(), sample["sub_label"].strip(), base.MASK
-            )
-            # substitute sub and obj placeholder in template with corresponding str
-            # and add bracket to the relational phrase
-            sample['bracket_sentences'] = bracket_relational_phrase(
-                args.template.strip(), sample['sub_label'].strip(), sample['obj_label'].strip()
-            )
-            all_samples.append(sample)
+    samples_batches_li, sentences_batches_li = [], []
+    for template in args.template:
+        # if template is active (1) use a single example for (sub,obj) and (2) ...
+        if template and template != "":
+            facts = []
+            for sample in all_samples:
+                sub = sample["sub_label"]
+                obj = sample["obj_label"]
+                if (sub, obj) not in facts:
+                    facts.append((sub, obj))
+            local_msg = "distinct template facts: {}".format(len(facts))
+            logger.info("\n" + local_msg + "\n")
+            print(local_msg)
+            new_all_samples = []
+            for fact in facts:
+                (sub, obj) = fact
+                sample = {}
+                sample["sub_label"] = sub
+                sample["obj_label"] = obj
+                # sobstitute all sentences with a standard template
+                sample["masked_sentences"] = parse_template(
+                    template.strip(), sample["sub_label"].strip(), base.MASK
+                )
+                # substitute sub and obj placeholder in template with corresponding str
+                # and add bracket to the relational phrase
+                sample['bracket_sentences'] = bracket_relational_phrase(
+                    template.strip(), sample['sub_label'].strip(), sample['obj_label'].strip()
+                )
+                new_all_samples.append(sample)
 
-    # create uuid if not present
-    i = 0
-    for sample in all_samples:
-        if "uuid" not in sample:
-            sample["uuid"] = i
-        i += 1
+        # create uuid if not present
+        i = 0
+        for sample in new_all_samples:
+            if "uuid" not in sample:
+                sample["uuid"] = i
+            i += 1
 
-    # shuffle data
-    if shuffle_data:
-        shuffle(all_samples)
+        # shuffle data
+        if shuffle_data:
+            new_all_samples = new_all_samples[perm]
 
-    samples_batches, sentences_batches, ret_msg = batchify(all_samples, args.batch_size)
-    logger.info("\n" + ret_msg + "\n")
+        samples_batches, sentences_batches, ret_msg = batchify(new_all_samples, args.batch_size)
+        logger.info("\n" + ret_msg + "\n")
+        samples_batches_li.append(samples_batches)
+        sentences_batches_li.append(sentences_batches)
 
-    if refine_template:
-        bracket_sentences = [sample['bracket_sentences'] for sample in all_samples]
-        new_temp = model.refine_cloze(bracket_sentences, batch_size=32, try_cuda=True)
-        new_temp = replace_template(args.template.strip(), ' '.join(new_temp))
-        print('old temp: {}'.format(args.template.strip()))
-        print('new temp: {}'.format(new_temp))
-        return new_temp
+        if refine_template:
+            bracket_sentences = [sample['bracket_sentences'] for sample in new_all_samples]
+            new_temp = model.refine_cloze(bracket_sentences, batch_size=32, try_cuda=True)
+            new_temp = replace_template(args.template.strip(), ' '.join(new_temp))
+            print('old temp: {}'.format(args.template.strip()))
+            print('new temp: {}'.format(new_temp))
+            return new_temp
 
     # ThreadPool
     num_threads = args.threads
@@ -421,22 +426,37 @@ def main(args, shuffle_data=True, model=None, refine_template=False):
     pool = ThreadPool(num_threads)
     list_of_results = []
 
-    for i in tqdm(range(len(samples_batches))):
+    samples_batches_li = list(zip(*samples_batches_li))
+    sentences_batches_li = list(zip(*sentences_batches_li))
 
-        samples_b = samples_batches[i]
-        sentences_b = sentences_batches[i]
+    for i in tqdm(range(len(samples_batches_li))):
 
-        original_log_probs_list, token_ids_list, masked_indices_list = model.get_batch_generation(
-            sentences_b, logger=logger
-        )
+        samples_b_all = samples_batches_li[i]
+        sentences_b_all = sentences_batches_li[i]
 
-        if vocab_subset is not None:
-            # filter log_probs
-            filtered_log_probs_list = model.filter_logprobs(
-                original_log_probs_list, filter_logprob_indices
+        filtered_log_probs_list_merge = None
+        samples_b = samples_b_all[-1]
+
+        for sentences_b in sentences_b_all:
+            original_log_probs_list, token_ids_list, masked_indices_list = model.get_batch_generation(
+                sentences_b, logger=logger
             )
-        else:
-            filtered_log_probs_list = original_log_probs_list
+
+            if vocab_subset is not None:
+                # filter log_probs
+                filtered_log_probs_list = model.filter_logprobs(
+                    original_log_probs_list, filter_logprob_indices
+                )
+            else:
+                filtered_log_probs_list = original_log_probs_list
+
+            # get the prediction probability
+            filtered_log_probs_list = [flp[masked_indices_list[ind][0]] for ind, flp in enumerate(filtered_log_probs_list)]
+            # add to overall probability
+            if filtered_log_probs_list_merge is None:
+                filtered_log_probs_list_merge = filtered_log_probs_list
+            else:
+                filtered_log_probs_list_merge = [a + b for a, b in zip(filtered_log_probs_list_merge, filtered_log_probs_list)]
 
         label_index_list = []
         for sample in samples_b:
@@ -476,7 +496,7 @@ def main(args, shuffle_data=True, model=None, refine_template=False):
             }
             for original_log_probs, filtered_log_probs, token_ids, masked_indices, label_index, sample in zip(
                 original_log_probs_list,
-                filtered_log_probs_list,
+                filtered_log_probs_list_merge,
                 token_ids_list,
                 masked_indices_list,
                 label_index_list,
