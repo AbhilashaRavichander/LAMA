@@ -225,7 +225,9 @@ def get_GoogleRE_parameters():
 
 def get_relation_phrase_parameters(args):
     relations = load_file(args.rel_file)
-    temps = [rel['template'] for rel in relations]
+    if args.top is None:
+        args.top = len(relations)
+    temps = [rel['template'] for rel in relations[:args.top]]
     relations[0]['template'] = temps
     relations = [relations[0]]
     data_path_pre = args.prefix
@@ -291,6 +293,7 @@ if __name__ == "__main__":
     parser.add_argument('--refine_template', type=str, default=None)
     parser.add_argument('--prefix', type=str, default='data/Google_RE/')
     parser.add_argument('--suffix', type=str, default='_test.jsonl')
+    parser.add_argument('--top', type=int, default=None)
     args = parser.parse_args()
     parameters = get_relation_phrase_parameters(args)
     #parameters = get_test_phrase_parameters(args)

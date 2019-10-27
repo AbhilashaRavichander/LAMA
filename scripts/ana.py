@@ -31,6 +31,7 @@ def out_ana(args):
 
 
 def wikidata_to_trex(args):
+    # TODO: dedup
     pattern_file, trex_file = args.inp.split(':')
     with open(pattern_file, 'r') as fin:
         pattern = json.load(fin)
@@ -63,9 +64,33 @@ def wikidata_to_trex(args):
                 fout.write(json.dumps(rel) + '\n')
 
 
+def rank_templates(args):
+    relation_name = os.path.basename(args.inp).split('.', 1)[0]
+    templates, scores = [], []
+    with open(args.inp, 'r') as fin:
+        for l in fin:
+            if l.startswith("{'dataset_filename':"):
+                templates.append(eval(l.strip())['template'])
+            elif l.startswith('P1all '):
+                scores.append(np.mean(list(map(float, l.strip().split(' ')[1].split('\t')))))
+    temp_set = set()
+    templates_new, scores_new = [], []
+    for temp, score in zip(templates, scores):
+        if temp in temp_set:
+            continue
+        temp_set.add(temp)
+        templates_new.append(temp)
+        scores_new.append(score)
+    sorted_temps = sorted(zip(templates_new, scores_new), key=lambda x: -x[1])
+    with open(args.out, 'w') as fout:
+        for temp, score in sorted_temps:
+            rel = {'relation': relation_name, 'template': temp, 'score': score}
+            fout.write(json.dumps(rel) + '\n')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='analyze output log')
-    parser.add_argument('--task', type=str, help='task', required=True, choices=['out', 'wikidata'])
+    parser.add_argument('--task', type=str, help='task', required=True, choices=['out', 'wikidata', 'sort'])
     parser.add_argument('--inp', type=str, help='input file')
     parser.add_argument('--out', type=str, help='output file')
     args = parser.parse_args()
@@ -74,3 +99,5 @@ if __name__ == '__main__':
         out_ana(args)
     elif args.task == 'wikidata':
         wikidata_to_trex(args)
+    elif args.task == 'sort':
+        rank_templates(args)
