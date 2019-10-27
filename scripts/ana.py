@@ -1,7 +1,9 @@
+from typing import List, Dict
 import argparse
 import numpy as np
 import json
 import os
+from collections import defaultdict
 
 
 def out_ana(args):
@@ -88,9 +90,25 @@ def rank_templates(args):
             fout.write(json.dumps(rel) + '\n')
 
 
+def major_class(args):
+    file2classes: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(lambda: 0))
+    for root, dirs, files in os.walk(args.inp):
+        for file in files:
+            with open(os.path.join(root, file), 'r') as fin:
+                for l in fin:
+                    obj = json.loads(l.strip())['obj_label']
+                    file2classes[file][obj] += 1
+            objs = sorted(file2classes[file].items(), key=lambda x: -x[1])
+            total = np.sum([obj[1] for obj in objs])
+            print(file, objs, total)
+            input()
+
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='analyze output log')
-    parser.add_argument('--task', type=str, help='task', required=True, choices=['out', 'wikidata', 'sort'])
+    parser.add_argument('--task', type=str, help='task', required=True, 
+        choices=['out', 'wikidata', 'sort', 'major_class'])
     parser.add_argument('--inp', type=str, help='input file')
     parser.add_argument('--out', type=str, help='output file')
     args = parser.parse_args()
@@ -101,3 +119,5 @@ if __name__ == '__main__':
         wikidata_to_trex(args)
     elif args.task == 'sort':
         rank_templates(args)
+    elif args.task == 'major_class':
+        major_class(args)
