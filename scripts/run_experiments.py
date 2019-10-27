@@ -4,6 +4,11 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 #
+import sys
+from os.path import dirname, abspath
+sys.path.insert(0, dirname(dirname(abspath(__file__))))
+print(dirname(dirname(abspath(__file__))))
+
 import argparse
 from batch_eval_KB_completion import main as run_evaluation
 from batch_eval_KB_completion import load_file
@@ -220,6 +225,9 @@ def get_GoogleRE_parameters():
 
 def get_relation_phrase_parameters(args):
     relations = load_file(args.rel_file)
+    temps = [rel['template'] for rel in relations]
+    relations[0]['template'] = temps
+    relations = [relations[0]]
     data_path_pre = args.prefix
     data_path_post = args.suffix
     refine_template = args.refine_template
@@ -284,6 +292,6 @@ if __name__ == "__main__":
     parser.add_argument('--prefix', type=str, default='data/Google_RE/')
     parser.add_argument('--suffix', type=str, default='_test.jsonl')
     args = parser.parse_args()
-    #parameters = get_relation_phrase_parameters(args)
-    parameters = get_test_phrase_parameters(args)
+    parameters = get_relation_phrase_parameters(args)
+    #parameters = get_test_phrase_parameters(args)
     run_all_LMs(parameters)
