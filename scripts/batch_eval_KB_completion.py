@@ -269,7 +269,7 @@ def filter_samples(model, samples, vocab_subset, max_sentence_length, template):
     return new_samples, msg
 
 
-def main(args, shuffle_data=True, model=None, refine_template=False):
+def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=False):
 
     if len(args.models_names) > 1:
         raise ValueError('Please specify a single language model (e.g., --lm "bert").')
@@ -336,6 +336,7 @@ def main(args, shuffle_data=True, model=None, refine_template=False):
     Precision_positivie = 0.0
 
     P1_li = []
+    obj_labels = []
 
     data = load_file(args.dataset_filename)
 
@@ -376,7 +377,6 @@ def main(args, shuffle_data=True, model=None, refine_template=False):
                     facts.append((sub, obj))
             local_msg = "distinct template facts: {}".format(len(facts))
             logger.info("\n" + local_msg + "\n")
-            print(local_msg)
             new_all_samples = []
             for fact in facts:
                 (sub, obj) = fact
@@ -405,6 +405,11 @@ def main(args, shuffle_data=True, model=None, refine_template=False):
         if shuffle_data:
             new_all_samples = new_all_samples[perm]
 
+        obj_labels = [sample['obj_label'] for sample in new_all_samples]
+        print('obj_labels {}'.format('\t'.join(map(str, obj_labels))))
+        if get_objs:
+            return
+
         samples_batches, sentences_batches, ret_msg = batchify(new_all_samples, args.batch_size)
         logger.info("\n" + ret_msg + "\n")
         samples_batches_li.append(samples_batches)
@@ -413,8 +418,8 @@ def main(args, shuffle_data=True, model=None, refine_template=False):
         if refine_template:
             bracket_sentences = [sample['bracket_sentences'] for sample in new_all_samples]
             new_temp = model.refine_cloze(bracket_sentences, batch_size=32, try_cuda=True)
-            new_temp = replace_template(args.template.strip(), ' '.join(new_temp))
-            print('old temp: {}'.format(args.template.strip()))
+            new_temp = replace_template(template.strip(), ' '.join(new_temp))
+            print('old temp: {}'.format(template.strip()))
             print('new temp: {}'.format(new_temp))
             return new_temp
 

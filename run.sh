@@ -19,9 +19,10 @@ set -e
 for filename in data/TREx/*; do
     bfilename=$(basename "$filename")
     outfilename="output/relational_phrase_exp/trex_refine_nosubtoken_run_avg/$bfilename.out"
+    objfilename="output/relational_phrase_exp/trex_objs/$bfilename.out"
     echo $bfilename
     if [ -f "$outfilename" ]; then
-        python scripts/ana.py --task out --inp $outfilename
+        python scripts/ana.py --task out --inp $outfilename --obj_file $objfilename
     fi
 done
 
@@ -56,5 +57,17 @@ for filename in data/TREx/*; do
     if [ -f "$infilename" ]; then
         python scripts/ana.py --task sort --inp $infilename --out $outfilename
     fi
+done
+'
+: '
+set -e
+for filename in data/TREx/*; do
+    bfilename=$(basename "$filename")
+    echo ${bfilename}
+    python scripts/run_experiments.py \
+        --rel_file data/TREx_wikipedia_template/${bfilename} \
+        --prefix data/TREx/ \
+        --get_objs \
+        --suffix .jsonl > output/relational_phrase_exp/trex_objs/${bfilename}.out 2>&1
 done
 '

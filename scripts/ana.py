@@ -1,14 +1,37 @@
-from typing import List, Dict
+from typing import List, Dict, Union, Any
 import argparse
 import numpy as np
 import json
 import os
 from collections import defaultdict
+import scipy.stats
+
+
+def avg_by_label(scores: List, labels: Union[List, None]):
+    if labels is None:
+        return np.mean(scores)
+    label2score: Dict[Any, float] = defaultdict(lambda: 0)
+    label2count: Dict[Any, int] = defaultdict(lambda: 0)
+    assert len(scores) == len(labels), 'scores length not equal to labels length'
+    for s, l in zip(scores, labels):
+        label2score[l] += s
+        label2count[l] += 1
+    return np.mean([label2score[k] / label2count[k] for k in label2score])
 
 
 def out_ana(args):
     stat = []
     templates = []
+    objs = None
+    obj_entropy = None
+    if args.obj_file:
+        with open(args.obj_file, 'r') as fin:
+            for l in fin:
+                if l.startswith('obj_labels'):
+                    objs = l.strip().split(' ', 1)[1].split('\t')
+        uni, counts = np.unique(objs, return_counts=True)
+        counts = counts / np.sum(counts)
+        obj_entropy = scipy.stats.entropy(counts)
     with open(args.inp, 'r') as fin:
         for l in fin:
             if l.startswith('P1all '):
@@ -16,10 +39,10 @@ def out_ana(args):
             elif l.startswith("{'dataset_filename':"):
                 templates.append(eval(l.strip())['template'])
     stat = np.array(stat)
-    first = np.mean(stat[0])  # the first template is manually designed
-    ensemble_score = np.mean(np.max(stat, 0))  # ensemble all the templates
+    first = avg_by_label(stat[0], objs)  # the first template is manually designed
+    ensemble_score = avg_by_label(np.max(stat, 0), objs)  # ensemble all the templates
     if len(stat) > 1:
-        temp_scores = np.mean(stat[1:], -1)
+        temp_scores = np.array([avg_by_label(s, objs) for s in stat[1:]])
         best = np.argmax(temp_scores)  # the best template (except for the manually designed one)
         best_temp = templates[best + 1]
         best_score = temp_scores[best]
@@ -30,6 +53,7 @@ def out_ana(args):
     print('best template: {}'.format(best_temp))
     print('first {:.3f}, best {:.3f}, allbest {:.3f}, ensemble {:.3f}, numtemp {}'.format(
         first, best_score, max(first, best_score), ensemble_score, len(templates)))
+    print('obj entropy: {}'.format(obj_entropy))
 
 
 def wikidata_to_trex(args):
@@ -110,6 +134,7 @@ if __name__ == '__main__':
     parser.add_argument('--task', type=str, help='task', required=True, 
         choices=['out', 'wikidata', 'sort', 'major_class'])
     parser.add_argument('--inp', type=str, help='input file')
+    parser.add_argument('--obj_file', type=str, help='obj file', default=None)
     parser.add_argument('--out', type=str, help='output file')
     args = parser.parse_args()
 
