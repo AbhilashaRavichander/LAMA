@@ -128,11 +128,58 @@ def major_class(args):
             input()
 
 
+def get_train_data(args, top=1000):
+    # wiki_domain/data_new/property_occurrence_prop435k/
+    # wiki_domain/data/hiro_wikidata/eid2name.tsv
+    occ_dir, name_file = args.inp.split(':')
+
+    '''
+    eid2name = {}
+    with open(name_file, 'r') as fin:
+        for l in fin:
+            l = l.strip().split('\t')
+            eid2name[l[0]] = l[1]
+    '''
+
+    pids = []
+    pid2hts: Dict[str, set] = defaultdict(set)
+    for root, dirs, files in os.walk('data/TREx/'):
+        for file in files:
+            pid = file.split('.', 1)[0]
+            pids.append(pid)
+            with open(os.path.join(root, file), 'r') as fin:
+                for l in fin:
+                    l = json.loads(l)
+                    pid2hts[pid].add((l['sub_uri'], l['obj_uri']))
+    print(len(pids), pids)
+
+    for pid in pids:
+        occ_file = os.path.join(occ_dir, pid + '.txt')
+        if not os.path.exists(occ_file):
+            raise Exception('{} not exist'.format(occ_file))
+        hts = []
+        with open(occ_file, 'r') as fin:
+            for l in fin:
+                h, t = l.strip().split()
+                #if h in eid2name and t in eid2name and (h, t) not in pid2hts[pid]:
+                #    hts.append((h, t))
+                if (h, t) not in pid2hts[pid]:
+                    hts.append((h, t))
+        if len(hts) <= top:
+            print('{} less than {}'.format(pid, top))
+
+        continue
+
+        with open(os.path.join(args.out, pid + '.jsonl'), 'w') as fout:
+            for h, t in hts:
+                rel = {'sub_uri': h, 'obj_uri': t, 'sub_label': eid2name[h], 'obj_label': eid2name[t]}
+                fout.write(json.dumps(rel) + '\n')
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='analyze output log')
     parser.add_argument('--task', type=str, help='task', required=True, 
-        choices=['out', 'wikidata', 'sort', 'major_class'])
+        choices=['out', 'wikidata', 'sort', 'major_class', 'get_train_data'])
     parser.add_argument('--inp', type=str, help='input file')
     parser.add_argument('--obj_file', type=str, help='obj file', default=None)
     parser.add_argument('--out', type=str, help='output file')
@@ -146,3 +193,5 @@ if __name__ == '__main__':
         rank_templates(args)
     elif args.task == 'major_class':
         major_class(args)
+    elif args.task == 'get_train_data':
+        get_train_data(args)
