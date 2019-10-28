@@ -5,6 +5,8 @@ import json
 import os
 from collections import defaultdict
 import scipy.stats
+from random import shuffle
+from tqdm import tqdm
 
 
 def avg_by_label(scores: List, labels: Union[List, None]):
@@ -133,13 +135,11 @@ def get_train_data(args, top=1000):
     # wiki_domain/data/hiro_wikidata/eid2name.tsv
     occ_dir, name_file = args.inp.split(':')
 
-    '''
     eid2name = {}
     with open(name_file, 'r') as fin:
-        for l in fin:
+        for l in tqdm(fin):
             l = l.strip().split('\t')
             eid2name[l[0]] = l[1]
-    '''
 
     pids = []
     pid2hts: Dict[str, set] = defaultdict(set)
@@ -153,22 +153,28 @@ def get_train_data(args, top=1000):
                     pid2hts[pid].add((l['sub_uri'], l['obj_uri']))
     print(len(pids), pids)
 
-    for pid in pids:
+    for pid in tqdm(pids):
         occ_file = os.path.join(occ_dir, pid + '.txt')
         if not os.path.exists(occ_file):
             raise Exception('{} not exist'.format(occ_file))
-        hts = []
+        hts = set()
         with open(occ_file, 'r') as fin:
             for l in fin:
                 h, t = l.strip().split()
-                #if h in eid2name and t in eid2name and (h, t) not in pid2hts[pid]:
-                #    hts.append((h, t))
-                if (h, t) not in pid2hts[pid]:
-                    hts.append((h, t))
+                if (h, t) in pid2hts[pid]:
+                    continue
+                if h not in eid2name or t not in eid2name:
+                    continue
+                if len(eid2name[h].split()) > 1 or len(eid2name[t].split()) > 1:
+                    continue
+                hts.add((h, t))
+                if len(hts) >= 10 * top:
+                    break
         if len(hts) <= top:
             print('{} less than {}'.format(pid, top))
-
-        continue
+        hts = list(hts)
+        shuffle(hts)
+        hts = hts[:top]
 
         with open(os.path.join(args.out, pid + '.jsonl'), 'w') as fout:
             for h, t in hts:
