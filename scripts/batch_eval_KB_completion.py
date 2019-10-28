@@ -405,15 +405,15 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
         if shuffle_data:
             new_all_samples = new_all_samples[perm]
 
-        obj_labels = [sample['obj_label'] for sample in new_all_samples]
-        print('obj_labels {}'.format('\t'.join(map(str, obj_labels))))
-        if get_objs:
-            return
-
         samples_batches, sentences_batches, ret_msg = batchify(new_all_samples, args.batch_size)
         logger.info("\n" + ret_msg + "\n")
         samples_batches_li.append(samples_batches)
         sentences_batches_li.append(sentences_batches)
+
+        obj_labels = [sample['obj_label'] for batch in samples_batches for sample in batch]
+        print('obj_labels {}'.format('\t'.join(map(str, obj_labels))))
+        if get_objs:
+            return
 
         if refine_template:
             bracket_sentences = [sample['bracket_sentences'] for sample in new_all_samples]

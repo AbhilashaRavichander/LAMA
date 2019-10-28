@@ -69,7 +69,7 @@ def main(args):
 
             # rank over the subset of the vocab (if defined) for the SINGLE masked tokens
             if masked_indices and len(masked_indices) > 0:
-                evaluation_metrics.get_ranking(filtered_log_probs_list[0], masked_indices, model.vocab, index_list=index_list)
+                evaluation_metrics.get_ranking_select(filtered_log_probs_list[0], masked_indices, model.vocab, index_list=index_list)
 
             # prediction and perplexity for the whole softmax
             print_sentence_predictions(original_log_probs_list[0], token_ids, model.vocab, masked_indices=masked_indices)
