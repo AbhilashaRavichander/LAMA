@@ -123,16 +123,14 @@ def rank_templates(args):
 
 def major_class(args):
     file2classes: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(lambda: 0))
-    for root, dirs, files in os.walk(args.inp):
-        for file in files:
-            with open(os.path.join(root, file), 'r') as fin:
-                for l in fin:
-                    obj = json.loads(l.strip())['obj_label']
-                    file2classes[file][obj] += 1
-            objs = sorted(file2classes[file].items(), key=lambda x: -x[1])
-            total = np.sum([obj[1] for obj in objs])
-            print(file, objs, total)
-            input()
+    with open(args.inp, 'r') as fin:
+        for l in fin:
+            obj = json.loads(l.strip())['obj_label']
+            file2classes[args.inp][obj] += 1
+    objs = sorted(file2classes[args.inp].items(), key=lambda x: -x[1])
+    total = np.sum([obj[1] for obj in objs])
+    #print(args.inp, objs, total)
+    print('micro {:.3f}, macro {:.3f}'.format(objs[0][1] / total, 1 / len(objs)))
 
 
 def get_train_data(args, top=1000):
