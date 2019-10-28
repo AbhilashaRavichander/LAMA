@@ -98,7 +98,12 @@ def rank_templates(args):
     with open(args.inp, 'r') as fin:
         for l in fin:
             if l.startswith("{'dataset_filename':"):
-                templates.append(eval(l.strip())['template'])
+                temp = eval(l.strip())['template']
+                if type(temp) is list:
+                    if len(temp) != 1:
+                        raise Exception('more than one temp')
+                    temp = temp[0]
+                templates.append(temp)
             elif l.startswith('P1all '):
                 scores.append(np.mean(list(map(float, l.strip().split(' ')[1].split('\t')))))
     temp_set = set()

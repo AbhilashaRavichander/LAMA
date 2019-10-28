@@ -94,6 +94,7 @@ def run_experiments(
     data_path_post,
     refine_template,
     get_objs,
+    batch_size,
     input_param={
         "lm": "bert",
         "label": "bert_large",
@@ -125,7 +126,7 @@ def run_experiments(
             "common_vocab_filename": "pre-trained_language_models/common_vocab_cased.txt",
             "template": "",
             "bert_vocab_name": "vocab.txt",
-            "batch_size": 32,
+            "batch_size": batch_size,
             "logdir": "output",
             "full_logdir": "output/results/{}/{}".format(
                 input_param["label"], relation["relation"]
@@ -239,7 +240,7 @@ def get_relation_phrase_parameters(args):
         relations = [relations[0]]
     data_path_pre = args.prefix
     data_path_post = args.suffix
-    return relations, data_path_pre, data_path_post, args.refine_template, args.get_objs
+    return relations, data_path_pre, data_path_post, args.refine_template, args.get_objs, args.batch_size
 
 
 def get_test_phrase_parameters(args):
@@ -302,6 +303,7 @@ if __name__ == "__main__":
     parser.add_argument('--top', type=int, default=None)
     parser.add_argument('--ensemble', help='ensemble probs of different templates', action='store_true')
     parser.add_argument('--get_objs', help='print out objects for evaluation', action='store_true')
+    parser.add_argument('--batch_size', type=int, default=32)
     args = parser.parse_args()
     parameters = get_relation_phrase_parameters(args)
     #parameters = get_test_phrase_parameters(args)
