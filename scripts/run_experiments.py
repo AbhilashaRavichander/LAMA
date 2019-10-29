@@ -232,10 +232,11 @@ def get_GoogleRE_parameters():
 
 def get_relation_phrase_parameters(args):
     relations = load_file(args.rel_file)
+    if args.top:
+        print('use top {} relations'.format(args.top))
+        relations = relations[:args.top]
     if args.ensemble:
-        if args.top is None:
-            args.top = len(relations)
-        temps = [rel['template'] for rel in relations[:args.top]]
+        temps = [rel['template'] for rel in relations]
         relations[0]['template'] = temps
         relations = [relations[0]]
     data_path_pre = args.prefix

@@ -447,6 +447,7 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                 sentences_b, logger=logger
             )
 
+            '''
             if vocab_subset is not None:
                 # filter log_probs
                 filtered_log_probs_list = model.filter_logprobs(
@@ -454,9 +455,16 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                 )
             else:
                 filtered_log_probs_list = original_log_probs_list
+            '''
 
             # get the prediction probability
-            filtered_log_probs_list = [flp[masked_indices_list[ind][0]] for ind, flp in enumerate(filtered_log_probs_list)]
+            if vocab_subset is not None:
+                filtered_log_probs_list = [
+                    flp[masked_indices_list[ind][0]].index_select(dim=-1, index=filter_logprob_indices)
+                    for ind, flp in enumerate(original_log_probs_list)]
+            else:
+                filtered_log_probs_list = [flp[masked_indices_list[ind][0]] for ind, flp in
+                                           enumerate(original_log_probs_list)]
             # add to overall probability
             if filtered_log_probs_list_merge is None:
                 filtered_log_probs_list_merge = filtered_log_probs_list

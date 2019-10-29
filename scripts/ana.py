@@ -59,7 +59,6 @@ def out_ana(args):
 
 
 def wikidata_to_trex(args):
-    # TODO: dedup
     pattern_file, trex_file = args.inp.split(':')
     with open(pattern_file, 'r') as fin:
         pattern = json.load(fin)
@@ -71,9 +70,14 @@ def wikidata_to_trex(args):
     for rel in relations:
         root_pid = rel['relation']
         templates = []
+        seen_sni = set()
         for pid in pattern:
             if pid == root_pid or pid.startswith(root_pid + '_'):
                 for sni in pattern[pid]['snippet']:
+                    if sni[0] in seen_sni:
+                        print('dup snippeit')
+                        continue
+                    seen_sni.add(sni[0])
                     sni_text, sni_count = sni[0][0], sni[1]
                     temp = '[X] {} [Y] .'.format(sni_text) if sni[0][1] == 1 else '[Y] {} [X] .'.format(sni_text)
                     templates.append((temp, sni_count))
