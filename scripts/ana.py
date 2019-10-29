@@ -77,7 +77,7 @@ def wikidata_to_trex(args):
                     if tuple(sni[0]) in seen_sni:
                         print('dup snippeit')
                         continue
-                    seen_sni.add(sni[0])
+                    seen_sni.add(tuple(sni[0]))
                     sni_text, sni_count = sni[0][0], sni[1]
                     temp = '[X] {} [Y] .'.format(sni_text) if sni[0][1] == 1 else '[Y] {} [X] .'.format(sni_text)
                     templates.append((temp, sni_count))
