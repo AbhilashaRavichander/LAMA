@@ -74,7 +74,7 @@ def wikidata_to_trex(args):
         for pid in pattern:
             if pid == root_pid or pid.startswith(root_pid + '_'):
                 for sni in pattern[pid]['snippet']:
-                    if sni[0] in seen_sni:
+                    if tuple(sni[0]) in seen_sni:
                         print('dup snippeit')
                         continue
                     seen_sni.add(sni[0])
