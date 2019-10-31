@@ -259,7 +259,7 @@ def get_test_phrase_parameters(args):
     refine_template = 'test.out'
     get_objs = False
     batch_size = 32
-    dynamic = 'real_lm_topk1'
+    dynamic = 'obj_lm_topk1'
     return relations, data_path_pre, data_path_post, None, get_objs, batch_size, dynamic
 
 

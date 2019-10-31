@@ -514,6 +514,11 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
             else:
                 filtered_log_probs_list = [flp[masked_indices_list[ind][0]] for ind, flp in
                                            enumerate(original_log_probs_list)]
+
+            if dynamic.startswith('obj_lm_topk'):
+                # use highest obj prob as consistency score
+                consist_score = torch.tensor([flp.max(0)[0].item() for flp in filtered_log_probs_list])
+
             # add to overall probability
             if filtered_log_probs_list_merge is None:
                 if dynamic == 'none':
@@ -521,7 +526,7 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                 elif dynamic == 'lm' or dynamic == 'real_lm':
                     filtered_log_probs_list_merge = filtered_log_probs_list
                     max_score = consist_score
-                elif dynamic.startswith('real_lm_topk'):
+                elif dynamic.startswith('real_lm_topk') or dynamic.startswith('obj_lm_topk'):
                     filtered_log_probs_list_merge = filtered_log_probs_list
                     consist_score_li.append(consist_score)
             else:
@@ -534,12 +539,12 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                         [a if c >= d else b for a, b, c, d in
                          zip(filtered_log_probs_list_merge, filtered_log_probs_list, max_score, consist_score)]
                     max_score = torch.max(max_score, consist_score)
-                elif dynamic.startswith('real_lm_topk'):
+                elif dynamic.startswith('real_lm_topk') or dynamic.startswith('obj_lm_topk'):
                     filtered_log_probs_list_merge.extend(filtered_log_probs_list)
                     consist_score_li.append(consist_score)
 
-        if dynamic.startswith('real_lm_topk'):
-            real_lm_topk = min(int(dynamic[len('real_lm_topk'):]), len(consist_score_li))
+        if dynamic.startswith('real_lm_topk') or dynamic.startswith('obj_lm_topk'):
+            real_lm_topk = min(int(dynamic[dynamic.find('topk') + 4:]), len(consist_score_li))
             # SHAPE: (batch_size, num_temp)
             consist_score_li = torch.stack(consist_score_li, -1)
             # SHAPE: (batch_size, topk)
