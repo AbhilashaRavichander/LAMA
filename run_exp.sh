@@ -5,7 +5,7 @@ raw_temp_socre_dir=$2
 raw_temp_socre_dir_train=$3
 sort_temp_dir=$4
 sort_temp_score_dir=$5
-top_rel=10
+top_rel=30
 
 refine_temp() {
     mkdir -p ${3}
@@ -77,7 +77,13 @@ for file in data/TREx/*; do
 done
 
 # evaluate using the top k templates
-for top in 1 2 3 4 5 10000
+for top in 1 2 3 4
+do
+    get_temp_ensemble_score ${sort_temp_dir} data/TREx/ ${sort_temp_score_dir} ${top} &
+done
+wait
+
+for top in 5 10000
 do
     get_temp_ensemble_score ${sort_temp_dir} data/TREx/ ${sort_temp_score_dir} ${top} &
 done

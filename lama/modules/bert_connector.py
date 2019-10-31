@@ -110,18 +110,21 @@ class Bert(Base_Connector):
 
         return indexed_string
 
-    def __get_input_tensors_batch(self, sentences_list):
+    def __get_input_tensors_batch(self, sentences_list, relation_mask=None):
         tokens_tensors_list = []
         segments_tensors_list = []
         masked_indices_list = []
         tokenized_text_list = []
+        masked_list_list = []
         max_tokens = 0
-        for sentences in sentences_list:
-            tokens_tensor, segments_tensor, masked_indices, tokenized_text = self.__get_input_tensors(sentences)
+        for sid, sentences in enumerate(sentences_list):
+            rm = relation_mask[sid] if relation_mask is not None else None
+            tokens_tensor, segments_tensor, masked_indices, tokenized_text, masked_list = self.__get_input_tensors(sentences, relation_mask=rm)
             tokens_tensors_list.append(tokens_tensor)
             segments_tensors_list.append(segments_tensor)
             masked_indices_list.append(masked_indices)
             tokenized_text_list.append(tokenized_text)
+            masked_list_list.append(masked_list)
             # assert(tokens_tensor.shape[1] == segments_tensor.shape[1])
             if (tokens_tensor.shape[1] > max_tokens):
                 max_tokens = tokens_tensor.shape[1]
@@ -156,23 +159,30 @@ class Bert(Base_Connector):
         # print(final_tokens_tensor.shape)
         # print(final_segments_tensor.shape)
         # print(final_attention_mask.shape)
-        return final_tokens_tensor, final_segments_tensor, final_attention_mask, masked_indices_list, tokenized_text_list
 
-    def __get_input_tensors(self, sentences):
+        mask_tensor = torch.nn.utils.rnn.pad_sequence([torch.tensor(m) for m in masked_list_list], batch_first=True, padding_value=0)
+
+        return final_tokens_tensor, final_segments_tensor, final_attention_mask, masked_indices_list, tokenized_text_list, mask_tensor
+
+    def __get_input_tensors(self, sentences, relation_mask=None):
 
         if len(sentences) > 2:
             print(sentences)
             raise ValueError("BERT accepts maximum two sentences in input for each data point")
 
-        first_tokenized_sentence = self.tokenizer.tokenize(sentences[0])
+        first_tokenized_sentence = self.tokenizer.tokenize(sentences[0]) if relation_mask is None else deepcopy(sentences[0])
         first_segment_id = np.zeros(len(first_tokenized_sentence), dtype=int).tolist()
 
         # add [SEP] token at the end
         first_tokenized_sentence.append(BERT_SEP)
         first_segment_id.append(0)
 
+        if relation_mask is not None:
+            all_relation_mask = deepcopy(relation_mask[0])
+            all_relation_mask.append(0)
+
         if len(sentences)>1 :
-            second_tokenized_sentece = self.tokenizer.tokenize(sentences[1])
+            second_tokenized_sentece = self.tokenizer.tokenize(sentences[1]) if relation_mask is None else deepcopy(sentences[1])
             second_segment_id = np.full(len(second_tokenized_sentece),1, dtype=int).tolist()
 
             # add [SEP] token at the end
@@ -181,6 +191,10 @@ class Bert(Base_Connector):
 
             tokenized_text = first_tokenized_sentence + second_tokenized_sentece
             segments_ids = first_segment_id + second_segment_id
+
+            if relation_mask is not None:
+                all_relation_mask.extend(relation_mask[1])
+                all_relation_mask.append(0)
         else:
             tokenized_text = first_tokenized_sentence
             segments_ids = first_segment_id
@@ -188,13 +202,19 @@ class Bert(Base_Connector):
         # add [CLS] token at the beginning
         tokenized_text.insert(0,BERT_CLS)
         segments_ids.insert(0,0)
+        if relation_mask is not None:
+            all_relation_mask.insert(0, 0)
 
         # look for masked indices
         masked_indices = []
+        masked_list = []
         for i in range(len(tokenized_text)):
             token = tokenized_text[i]
             if token == MASK:
                 masked_indices.append(i)
+                masked_list.append(0)
+            else:
+                masked_list.append(1)
 
         indexed_tokens = self.tokenizer.convert_tokens_to_ids(tokenized_text)
 
@@ -202,7 +222,10 @@ class Bert(Base_Connector):
         tokens_tensor = torch.tensor([indexed_tokens])
         segments_tensors = torch.tensor([segments_ids])
 
-        return tokens_tensor, segments_tensors, masked_indices, tokenized_text
+        if relation_mask is not None:
+            masked_list = all_relation_mask
+
+        return tokens_tensor, segments_tensors, masked_indices, tokenized_text, masked_list
 
     def __get_token_ids_from_tensor(self, indexed_string):
         token_ids = []
@@ -217,14 +240,19 @@ class Bert(Base_Connector):
     def _cuda(self):
         self.masked_bert_model.cuda()
 
-    def get_batch_generation(self, sentences_list, logger= None,
-                             try_cuda=True):
+    def get_batch_generation(self, sentences_list, logger= None, try_cuda=True, relation_mask=None):
         if not sentences_list:
             return None
         if try_cuda:
             self.try_cuda()
 
-        tokens_tensor, segments_tensor, attention_mask_tensor, masked_indices_list, tokenized_text_list = self.__get_input_tensors_batch(sentences_list)
+        raw_tokens_tensor, segments_tensor, attention_mask_tensor, masked_indices_list, tokenized_text_list, mask_tensor = \
+            self.__get_input_tensors_batch(sentences_list, relation_mask=relation_mask)
+
+        if relation_mask is not None:  # mask out relational phrase
+            tokens_tensor = raw_tokens_tensor * (1 - mask_tensor) + mask_tensor * self.tokenizer.convert_tokens_to_ids([MASK])[0]
+        else:
+            tokens_tensor = raw_tokens_tensor
 
         if logger is not None:
             logger.debug("\n{}\n".format(tokenized_text_list))
@@ -242,7 +270,7 @@ class Bert(Base_Connector):
         for indexed_string in tokens_tensor.numpy():
             token_ids_list.append(self.__get_token_ids_from_tensor(indexed_string))
 
-        return log_probs, token_ids_list, masked_indices_list
+        return log_probs, token_ids_list, masked_indices_list, raw_tokens_tensor, mask_tensor
 
     def get_contextual_embeddings(self, sentences_list, try_cuda=True):
 

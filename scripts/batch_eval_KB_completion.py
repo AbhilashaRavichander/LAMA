@@ -23,6 +23,8 @@ import multiprocessing
 import lama.evaluation_metrics as metrics
 import time, sys
 import numpy as np
+import torch
+import torch.nn.functional as F
 
 
 def load_file(filename):
@@ -55,6 +57,31 @@ def parse_template(template, subject_label, object_label):
     template = template.replace(SUBJ_SYMBOL, subject_label)
     template = template.replace(OBJ_SYMBOL, object_label)
     return [template]
+
+
+def parse_template_tokenize(template, subject_label, mask_label, model):
+    SUBJ_SYMBOL = "[X]"
+    OBJ_SYMBOL = "[Y]"
+    template.split()
+    x_pos = template.index(SUBJ_SYMBOL)
+    y_pos = template.index(OBJ_SYMBOL)
+    template = template.replace(SUBJ_SYMBOL, mask_label)
+    template = template.replace(OBJ_SYMBOL, mask_label)
+    toks = model.tokenizer.tokenize(template)
+    relation_mask = []
+    mask_pos = []
+    for i, tok in enumerate(toks):
+        if tok == mask_label:
+            relation_mask.append(0)
+            mask_pos.append(i)
+        else:
+            relation_mask.append(1)
+    assert len(mask_pos) == 2, 'not binary relation'
+    ind = mask_pos[0] if x_pos < y_pos else mask_pos[1]
+    sub_toks = model.tokenizer.tokenize(subject_label)
+    toks = toks[:ind] + sub_toks + toks[ind + 1:]
+    relation_mask = relation_mask[:ind] + ([0] * len(sub_toks)) + relation_mask[ind + 1:]
+    return [toks], [relation_mask]
 
 
 def bracket_relational_phrase(template, subject_label, object_label):
@@ -269,7 +296,7 @@ def filter_samples(model, samples, vocab_subset, max_sentence_length, template):
     return new_samples, msg
 
 
-def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=False):
+def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=False, dynamic=None):
 
     if len(args.models_names) > 1:
         raise ValueError('Please specify a single language model (e.g., --lm "bert").')
@@ -387,6 +414,10 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                 sample["masked_sentences"] = parse_template(
                     template.strip(), sample["sub_label"].strip(), base.MASK
                 )
+                if dynamic == 'real_lm' or dynamic.startswith('real_lm_topk'):
+                    sample["tokenized_sentences"] = parse_template_tokenize(
+                        template.strip(), sample["sub_label"].strip(), base.MASK, model
+                    )
                 # substitute sub and obj placeholder in template with corresponding str
                 # and add bracket to the relational phrase
                 sample['bracket_sentences'] = bracket_relational_phrase(
@@ -441,11 +472,29 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
 
         filtered_log_probs_list_merge = None
         samples_b = samples_b_all[-1]
+        max_score = float('-inf')
+        consist_score_li = []
 
-        for sentences_b in sentences_b_all:
-            original_log_probs_list, token_ids_list, masked_indices_list = model.get_batch_generation(
-                sentences_b, logger=logger
-            )
+        for sentences_b, samples_b_this in zip(sentences_b_all, samples_b_all):
+            # TODO: add tokens_tensor and mask_tensor for more models
+            original_log_probs_list, token_ids_list, masked_indices_list, tokens_tensor, mask_tensor = \
+                model.get_batch_generation(sentences_b, logger=logger)
+
+            if dynamic == 'real_lm' or dynamic.startswith('real_lm_topk'):
+                sentences_b_mask_rel = [s['tokenized_sentences'][0] for s in samples_b_this]
+                relation_mask = [s['tokenized_sentences'][1] for s in samples_b_this]
+                consist_log_probs_list, _, _, tokens_tensor, mask_tensor = \
+                    model.get_batch_generation(sentences_b_mask_rel, logger=logger, relation_mask=relation_mask)
+            else:
+                consist_log_probs_list = original_log_probs_list
+
+            if dynamic == 'lm' or dynamic == 'real_lm' or dynamic.startswith('real_lm_topk'):
+                # use avg prob of the templates as
+                mask_tensor = mask_tensor.float()
+                consist_log_probs_list_flat = consist_log_probs_list.view(-1, consist_log_probs_list.size(-1))
+                token_logprob = torch.gather(consist_log_probs_list_flat, dim=1, index=tokens_tensor.view(-1, 1)).view(*consist_log_probs_list.size()[:2])
+                token_logprob = token_logprob * mask_tensor
+                consist_score = token_logprob.sum(-1) / mask_tensor.sum(-1)  # normalized prob
 
             '''
             if vocab_subset is not None:
@@ -467,9 +516,44 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                                            enumerate(original_log_probs_list)]
             # add to overall probability
             if filtered_log_probs_list_merge is None:
-                filtered_log_probs_list_merge = filtered_log_probs_list
+                if dynamic == None:
+                    filtered_log_probs_list_merge = filtered_log_probs_list
+                elif dynamic == 'lm' or dynamic == 'real_lm':
+                    filtered_log_probs_list_merge = filtered_log_probs_list
+                    max_score = consist_score
+                elif dynamic.startswith('real_lm_topk'):
+                    filtered_log_probs_list_merge = filtered_log_probs_list
+                    consist_score_li.append(consist_score)
             else:
-                filtered_log_probs_list_merge = [a + b for a, b in zip(filtered_log_probs_list_merge, filtered_log_probs_list)]
+                if dynamic == None:
+                    filtered_log_probs_list_merge = \
+                        [a + b for a, b in zip(filtered_log_probs_list_merge, filtered_log_probs_list)]
+                elif dynamic == 'lm' or dynamic == 'real_lm':
+                    #print((max_score < consist_score).sum())
+                    filtered_log_probs_list_merge = \
+                        [a if c >= d else b for a, b, c, d in
+                         zip(filtered_log_probs_list_merge, filtered_log_probs_list, max_score, consist_score)]
+                    max_score = torch.max(max_score, consist_score)
+                elif dynamic.startswith('real_lm_topk'):
+                    filtered_log_probs_list_merge.extend(filtered_log_probs_list)
+                    consist_score_li.append(consist_score)
+
+        if dynamic.startswith('real_lm_topk'):
+            real_lm_topk = min(int(dynamic[len('real_lm_topk'):]), len(consist_score_li))
+            # SHAPE: (batch_size, num_temp)
+            consist_score_li = torch.stack(consist_score_li, -1)
+            # SHAPE: (batch_size, topk)
+            consist_score, consist_ind = consist_score_li.topk(real_lm_topk, dim=-1)
+            # SHAPE: (batch_size, 1)
+            consist_score = consist_score.min(-1, keepdim=True)[0]
+            # SHAPE: (batch_size, num_temp, 1)
+            consist_mask = (consist_score_li >= consist_score).float().unsqueeze(-1)
+            # SHAPE: (batch_size, num_temp, filter_vocab_size)
+            filtered_log_probs_list_merge = torch.stack(filtered_log_probs_list_merge, 0).view(
+                len(sentences_b_all), consist_mask.size(0), -1).permute(1, 0, 2)
+            # avg over top k
+            filtered_log_probs_list_merge = filtered_log_probs_list_merge * consist_mask
+            filtered_log_probs_list_merge = filtered_log_probs_list_merge.sum(1) / consist_mask.sum(1)
 
         label_index_list = []
         for sample in samples_b:

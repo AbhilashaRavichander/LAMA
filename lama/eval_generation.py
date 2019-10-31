@@ -57,7 +57,8 @@ def main(args):
 
         for model_name, model in models.items():
             print("\n{}:".format(model_name))
-            original_log_probs_list, [token_ids], [masked_indices] = model.get_batch_generation([sentences], try_cuda=False)
+            # TODO: add more outputs for other lm
+            original_log_probs_list, [token_ids], [masked_indices], _, _ = model.get_batch_generation([sentences], try_cuda=False)
 
             index_list = None
             if vocab_subset is not None:
