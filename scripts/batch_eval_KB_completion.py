@@ -296,7 +296,7 @@ def filter_samples(model, samples, vocab_subset, max_sentence_length, template):
     return new_samples, msg
 
 
-def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=False, dynamic=None):
+def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=False, dynamic='none'):
 
     if len(args.models_names) > 1:
         raise ValueError('Please specify a single language model (e.g., --lm "bert").')
@@ -516,7 +516,7 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                                            enumerate(original_log_probs_list)]
             # add to overall probability
             if filtered_log_probs_list_merge is None:
-                if dynamic == None:
+                if dynamic == 'none':
                     filtered_log_probs_list_merge = filtered_log_probs_list
                 elif dynamic == 'lm' or dynamic == 'real_lm':
                     filtered_log_probs_list_merge = filtered_log_probs_list
@@ -525,7 +525,7 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                     filtered_log_probs_list_merge = filtered_log_probs_list
                     consist_score_li.append(consist_score)
             else:
-                if dynamic == None:
+                if dynamic == 'none':
                     filtered_log_probs_list_merge = \
                         [a + b for a, b in zip(filtered_log_probs_list_merge, filtered_log_probs_list)]
                 elif dynamic == 'lm' or dynamic == 'real_lm':
