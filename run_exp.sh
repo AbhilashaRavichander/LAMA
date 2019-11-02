@@ -50,6 +50,22 @@ get_temp_ensemble_score() {
     done
 }
 
+get_temp_ensemble_dynamic_score() {
+    mkdir -p ${3}${4}_objlm${5}
+    for file in ${1}/*; do
+        bfile=$(basename "${file}")
+        echo ${bfile}
+        python scripts/run_experiments.py \
+            --rel_file ${1}/${bfile} \
+            --prefix ${2} \
+            --suffix .jsonl \
+            --top ${4} \
+            --ensemble \
+            --dynamic obj_lm_topk${5} \
+            --batch_size 32 > ${3}${4}_objlm${5}/${bfile}.out 2>&1
+    done
+}
+
 # refine templates
 if [ $# -gt 5 ]; then
     refine_temp_dir=$6
@@ -88,5 +104,20 @@ do
     get_temp_ensemble_score ${sort_temp_dir} data/TREx/ ${sort_temp_score_dir} ${top} &
 done
 wait
+
+: '
+# evaluate using dynamic top k templates
+sort_top=10
+for dyn_top in 1 2 3
+do
+    get_temp_ensemble_dynamic_score ${sort_temp_dir} data/TREx/ ${sort_temp_score_dir} ${sort_top} ${dyn_top} &
+done
+
+for dyn_top in 4 5
+do
+    get_temp_ensemble_dynamic_score ${sort_temp_dir} data/TREx/ ${sort_temp_score_dir} ${sort_top} ${dyn_top} &
+done
+wait
+'
 
 echo done

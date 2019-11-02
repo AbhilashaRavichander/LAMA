@@ -517,7 +517,7 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
 
             if dynamic.startswith('obj_lm_topk'):
                 # use highest obj prob as consistency score
-                consist_score = torch.tensor([flp.max(0)[0].item() for flp in filtered_log_probs_list])
+                consist_score = torch.tensor([torch.max(flp).item() for flp in filtered_log_probs_list])
 
             # add to overall probability
             if filtered_log_probs_list_merge is None:
