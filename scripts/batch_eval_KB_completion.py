@@ -465,6 +465,9 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
     samples_batches_li = list(zip(*samples_batches_li))
     sentences_batches_li = list(zip(*sentences_batches_li))
 
+    c_inc_meaning = ['top12 prob gap', 'top1 prob']
+    c_inc_stat = np.zeros((2, 3))  # [[*, c_num], [*, inc_num]]
+
     for i in tqdm(range(len(samples_batches_li))):
 
         samples_b_all = samples_batches_li[i]
@@ -521,13 +524,10 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
 
             # add to overall probability
             if filtered_log_probs_list_merge is None:
-                if dynamic == 'none':
-                    filtered_log_probs_list_merge = filtered_log_probs_list
-                elif dynamic == 'lm' or dynamic == 'real_lm':
-                    filtered_log_probs_list_merge = filtered_log_probs_list
+                filtered_log_probs_list_merge = filtered_log_probs_list
+                if dynamic == 'lm' or dynamic == 'real_lm':
                     max_score = consist_score
                 elif dynamic.startswith('real_lm_topk') or dynamic.startswith('obj_lm_topk'):
-                    filtered_log_probs_list_merge = filtered_log_probs_list
                     consist_score_li.append(consist_score)
             else:
                 if dynamic == 'none':
@@ -543,22 +543,9 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                     filtered_log_probs_list_merge.extend(filtered_log_probs_list)
                     consist_score_li.append(consist_score)
 
-        if dynamic.startswith('real_lm_topk') or dynamic.startswith('obj_lm_topk'):
-            real_lm_topk = min(int(dynamic[dynamic.find('topk') + 4:]), len(consist_score_li))
-            # SHAPE: (batch_size, num_temp)
-            consist_score_li = torch.stack(consist_score_li, -1)
-            # SHAPE: (batch_size, topk)
-            consist_score, consist_ind = consist_score_li.topk(real_lm_topk, dim=-1)
-            # SHAPE: (batch_size, 1)
-            consist_score = consist_score.min(-1, keepdim=True)[0]
-            # SHAPE: (batch_size, num_temp, 1)
-            consist_mask = (consist_score_li >= consist_score).float().unsqueeze(-1)
-            # SHAPE: (batch_size, num_temp, filter_vocab_size)
-            filtered_log_probs_list_merge = torch.stack(filtered_log_probs_list_merge, 0).view(
-                len(sentences_b_all), consist_mask.size(0), -1).permute(1, 0, 2)
-            # avg over top k
-            filtered_log_probs_list_merge = filtered_log_probs_list_merge * consist_mask
-            filtered_log_probs_list_merge = filtered_log_probs_list_merge.sum(1) / consist_mask.sum(1)
+        # SHAPE: (batch_size, num_temp, filter_vocab_size)
+        filtered_log_probs_list_merge = torch.stack(filtered_log_probs_list_merge, 0).view(
+            len(sentences_b_all), len(filtered_log_probs_list_merge) // len(sentences_b_all), -1).permute(1, 0, 2)
 
         label_index_list = []
         for sample in samples_b:
@@ -583,6 +570,26 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                 )
 
             label_index_list.append(obj_label_id)
+
+        # SHAPE: (batch_size)
+        label_index_tensor = torch.tensor([index_list.index(li[0]) for li in label_index_list])
+        c_inc = np.array(metrics.analyze_prob(
+            filtered_log_probs_list_merge, label_index_tensor, output=False, method='sample'))
+        c_inc_stat += c_inc
+
+        if dynamic.startswith('real_lm_topk') or dynamic.startswith('obj_lm_topk'):
+            real_lm_topk = min(int(dynamic[dynamic.find('topk') + 4:]), len(consist_score_li))
+            # SHAPE: (batch_size, num_temp)
+            consist_score_li = torch.stack(consist_score_li, -1)
+            # SHAPE: (batch_size, topk)
+            consist_score, consist_ind = consist_score_li.topk(real_lm_topk, dim=-1)
+            # SHAPE: (batch_size, 1)
+            consist_score = consist_score.min(-1, keepdim=True)[0]
+            # SHAPE: (batch_size, num_temp, 1)
+            consist_mask = (consist_score_li >= consist_score).float().unsqueeze(-1)
+            # avg over top k
+            filtered_log_probs_list_merge = filtered_log_probs_list_merge * consist_mask
+            filtered_log_probs_list_merge = filtered_log_probs_list_merge.sum(1) / consist_mask.sum(1)
 
         arguments = [
             {
@@ -729,6 +736,9 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
         pickle.dump(all_results, f)
 
     print('P1all {}'.format('\t'.join(map(str, P1_li))))
+    print('meaning: {}'.format(c_inc_meaning))
+    print('correct-incorrect {}'.format(
+        '\t'.join(map(str, (c_inc_stat[:, :-1] / (c_inc_stat[:, -1:] + 1e-5)).reshape(-1)))))
 
     return Precision1
 

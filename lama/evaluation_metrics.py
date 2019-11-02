@@ -103,3 +103,61 @@ def get_ranking_select(log_probs, masked_indices, vocab, label_index = None, ind
     log_probs = log_probs[masked_index]
 
     return get_ranking(log_probs, vocab, label_index=label_index, index_list=index_list, topk=topk, P_AT=P_AT, print_generation=print_generation)
+
+
+def analyze_prob(log_prob: torch.FloatTensor,  # SHAPE: (batch_size, num_temp, vocab_size)
+                 label_index: torch.LongTensor,  # SHAPE: (batch_size)
+                 output: bool = False,
+                 method: str = 'all'
+                 ):
+    topk = 5
+    show_num = 5
+    vocab_size = log_prob.size(-1)
+    prob = log_prob.exp()
+    # SHAPE: (batch_size, num_temp, topk)
+    prob_top, prob_top_ind = torch.topk(input=prob, k=topk, dim=-1)
+    # SHAPE: (batch_size, num_temp)
+    correct_mask = prob_top_ind[:, :, 0].eq(label_index.view(-1, 1))
+    # SHAPE: (batch_size, num_temp)
+    prob_gap = prob_top[:, :, 0] - prob_top[:, :, 1]
+    prob_abs = prob_top[:, :, 0]
+
+    c_prob_top = prob_top.masked_select(correct_mask.unsqueeze(-1)).view(-1, topk)
+    inc_prob_top = prob_top.masked_select(~correct_mask.unsqueeze(-1)).view(-1, topk)
+
+    if method == 'all':
+        ## overall statistics
+        # SHAPE: (None)
+        c_prob_gap = prob_gap.masked_select(correct_mask)
+        c_prob_abs = prob_abs.masked_select(correct_mask)
+        # SHAPE: (None, topk)
+        inc_prob_gap = prob_gap.masked_select(~correct_mask)
+        inc_prob_abs = prob_abs.masked_select(~correct_mask)
+        num_c, num_inc = c_prob_gap.size(0), inc_prob_gap.size(0)
+
+        c_gap = c_prob_gap.sum().item()
+        inc_gap = inc_prob_gap.sum().item()
+        c_abs = c_prob_abs.sum().item()
+        inc_abs = inc_prob_abs.sum().item()
+
+    elif method == 'sample':
+        ## sample-wise statistics
+        correct_mask = correct_mask.float()
+        c_gap = (prob_gap * correct_mask).max(-1)[0].sum().item()
+        c_abs = (prob_abs * correct_mask).max(-1)[0].sum().item()
+        inc_gap = (prob_gap * (1 - correct_mask)).max(-1)[0].sum().item()
+        inc_abs = (prob_abs * (1 - correct_mask)).max(-1)[0].sum().item()
+        num_c = correct_mask.max(-1)[0].sum()
+        num_inc = (1 - correct_mask).max(-1)[0].sum()
+
+    else:
+        raise Exception
+
+    if output:
+        print('#correct temp {}, #incorrect temp {}'.format(num_c, num_inc))
+        print('correct')
+        print(c_prob_top[np.random.choice(num_c, min(show_num, num_c), replace=False)])
+        print('incorrect')
+        print(inc_prob_top[np.random.choice(num_inc, min(show_num, num_inc), replace=False)])
+
+    return (c_gap, c_abs, num_c), (inc_gap, inc_abs, num_inc)
