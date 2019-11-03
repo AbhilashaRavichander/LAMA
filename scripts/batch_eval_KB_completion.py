@@ -524,13 +524,19 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
             if dynamic.startswith('obj_lm_topk'):
                 # use highest obj prob as consistency score
                 consist_score = torch.tensor([torch.max(flp).item() for flp in filtered_log_probs_list])
+            elif dynamic.startswith('obj_lmgap_topk'):
+                # the gap between the highest prediction log p1 - log p2
+                get_gap = lambda top2: (top2[0] - top2[1]).item()
+                consist_score = torch.tensor([get_gap(torch.topk(flp, k=2)[0]) for flp in filtered_log_probs_list])
 
             # add to overall probability
             if filtered_log_probs_list_merge is None:
                 filtered_log_probs_list_merge = filtered_log_probs_list
                 if dynamic == 'lm' or dynamic == 'real_lm':
                     max_score = consist_score
-                elif dynamic.startswith('real_lm_topk') or dynamic.startswith('obj_lm_topk'):
+                elif dynamic.startswith('real_lm_topk') or \
+                        dynamic.startswith('obj_lm_topk') or \
+                        dynamic.startswith('obj_lmgap_topk'):
                     consist_score_li.append(consist_score)
             else:
                 if dynamic == 'none':
@@ -542,7 +548,9 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                         [a if c >= d else b for a, b, c, d in
                          zip(filtered_log_probs_list_merge, filtered_log_probs_list, max_score, consist_score)]
                     max_score = torch.max(max_score, consist_score)
-                elif dynamic.startswith('real_lm_topk') or dynamic.startswith('obj_lm_topk'):
+                elif dynamic.startswith('real_lm_topk') or \
+                        dynamic.startswith('obj_lm_topk') or \
+                        dynamic.startswith('obj_lmgap_topk'):
                     filtered_log_probs_list_merge.extend(filtered_log_probs_list)
                     consist_score_li.append(consist_score)
 
@@ -570,7 +578,9 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
 
             label_index_list.append(obj_label_id)
 
-        if dynamic.startswith('real_lm_topk') or dynamic.startswith('obj_lm_topk'):  # analyze prob
+        if dynamic.startswith('real_lm_topk') or \
+                dynamic.startswith('obj_lm_topk') or \
+                dynamic.startswith('obj_lmgap_topk'):  # analyze prob
             # SHAPE: (batch_size, num_temp, filter_vocab_size)
             filtered_log_probs_list_merge = torch.stack(filtered_log_probs_list_merge, 0).view(
                 len(sentences_b_all), len(filtered_log_probs_list_merge) // len(sentences_b_all), -1).permute(1, 0, 2)
@@ -581,7 +591,9 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                 filtered_log_probs_list_merge, label_index_tensor, output=False, method='sample'))
             c_inc_stat += c_inc
 
-        if dynamic.startswith('real_lm_topk') or dynamic.startswith('obj_lm_topk'):  # dynamic ensemble
+        if dynamic.startswith('real_lm_topk') or \
+                dynamic.startswith('obj_lm_topk') or \
+                dynamic.startswith('obj_lmgap_topk'):  # dynamic ensemble
             real_lm_topk = min(int(dynamic[dynamic.find('topk') + 4:]), len(consist_score_li))
             # SHAPE: (batch_size, num_temp)
             consist_score_li = torch.stack(consist_score_li, -1)

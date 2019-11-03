@@ -143,12 +143,17 @@ def analyze_prob(log_prob: torch.FloatTensor,  # SHAPE: (batch_size, num_temp, v
     elif method == 'sample':
         ## sample-wise statistics
         correct_mask = correct_mask.float()
+        incorrect_mask = 1 - correct_mask
+        # only consider samples with both correct and incorrect templates
+        correct_mask = correct_mask * incorrect_mask.max(-1, keepdim=True)[0]
+        incorrect_mask = incorrect_mask * correct_mask.max(-1, keepdim=True)[0]
+
         c_gap = (prob_gap * correct_mask).max(-1)[0].sum().item()
         c_abs = (prob_abs * correct_mask).max(-1)[0].sum().item()
-        inc_gap = (prob_gap * (1 - correct_mask)).max(-1)[0].sum().item()
-        inc_abs = (prob_abs * (1 - correct_mask)).max(-1)[0].sum().item()
+        inc_gap = (prob_gap * incorrect_mask).max(-1)[0].sum().item()
+        inc_abs = (prob_abs * incorrect_mask).max(-1)[0].sum().item()
         num_c = correct_mask.max(-1)[0].sum()
-        num_inc = (1 - correct_mask).max(-1)[0].sum()
+        num_inc = incorrect_mask.max(-1)[0].sum()
 
     else:
         raise Exception
