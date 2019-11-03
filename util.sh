@@ -19,8 +19,22 @@ eval() {
     done
 }
 
+ana() {
+    set -e
+    for file in data/TREx/*; do
+        bfile=$(basename "${file}")
+        outfile=${1}/${bfile}.out
+        echo ${bfile}
+        if [ -f "${outfile}" ]; then
+            grep "correct-incorrect" ${outfile}
+        fi
+    done
+}
+
 if [[ $1 == 'eval' ]]; then
     eval $2 $3
+elif [[ $1 == 'ana' ]]; then
+    ana $2
 elif [[ $1 == 'other' ]]; then
     echo other
 fi
