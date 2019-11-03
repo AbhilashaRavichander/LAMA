@@ -96,6 +96,7 @@ def run_experiments(
     get_objs,
     batch_size,
     dynamic=None,
+    use_prob=False,
     input_param={
         "lm": "bert",
         "label": "bert_large",
@@ -162,7 +163,7 @@ def run_experiments(
 
         Precision1 = run_evaluation(args, shuffle_data=False, model=model,
                                     refine_template=bool(refine_template),
-                                    get_objs=get_objs, dynamic=dynamic)
+                                    get_objs=get_objs, dynamic=dynamic, use_prob=use_prob)
         if get_objs:
             return
 
@@ -243,24 +244,26 @@ def get_relation_phrase_parameters(args):
         relations = [relations[0]]
     data_path_pre = args.prefix
     data_path_post = args.suffix
-    return relations, data_path_pre, data_path_post, args.refine_template, args.get_objs, args.batch_size, args.dynamic
+    return relations, data_path_pre, data_path_post, args.refine_template, \
+           args.get_objs, args.batch_size, args.dynamic, args.use_prob
 
 
 def get_test_phrase_parameters(args):
     #relations = [{'relation': 'P27', 'template': '[X] what a terrorist incident in [Y] .'}]
     #relations = [{'relation': 'P27', 'template': '[X] is an [Y] citizen .'}]
     #relations = [{"relation": "P1001", "template": "[X] is the first,,,,andandthe President of [Y] .", "label": None, "description": None, "type": "N-M", "wikipedia_count": 21, "old_template": "[X] in the australian state of [Y] ."}]
-    #relations = [{"relation": "P108", "template": ["[X] works for [Y] .", "[Y] commentator [X] ."]}]
+    relations = [{"relation": "P108", "template": ["[X] works for [Y] .", "[Y] commentator [X] ."]}]
     #relations = [{"relation": "P108", "template": ["[Y] commentator [X] ."]}]
     #relations = [{"relation": "P108", "template": ["[X] works for [Y] ."]}]
-    relations = [{"relation": "P19", "template": ["[X] was born in [Y] .", "[X] label [Y] .", "[X] died at [Y] ."]}]
+    #relations = [{"relation": "P19", "template": ["[X] was born in [Y] .", "[X] label [Y] .", "[X] died at [Y] ."]}]
     data_path_pre = "data/TREx/"
     data_path_post = ".jsonl"
     refine_template = 'test.out'
     get_objs = False
     batch_size = 32
-    dynamic = 'obj_lm_topk1'
-    return relations, data_path_pre, data_path_post, None, get_objs, batch_size, dynamic
+    dynamic = 'none'
+    use_prob = True
+    return relations, data_path_pre, data_path_post, None, get_objs, batch_size, dynamic, use_prob
 
 
 def get_ConceptNet_parameters(data_path_pre="data/"):
@@ -312,6 +315,7 @@ if __name__ == "__main__":
     parser.add_argument('--get_objs', help='print out objects for evaluation', action='store_true')
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--dynamic', type=str, help='dynamically select template', default='none')
+    parser.add_argument('--use_prob', help='use prob instead of log prob', action='store_true')
     args = parser.parse_args()
     parameters = get_relation_phrase_parameters(args)
     #parameters = get_test_phrase_parameters(args)

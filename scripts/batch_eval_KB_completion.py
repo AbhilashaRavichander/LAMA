@@ -296,7 +296,7 @@ def filter_samples(model, samples, vocab_subset, max_sentence_length, template):
     return new_samples, msg
 
 
-def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=False, dynamic='none'):
+def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=False, dynamic='none', use_prob=False):
 
     if len(args.models_names) > 1:
         raise ValueError('Please specify a single language model (e.g., --lm "bert").')
@@ -483,6 +483,9 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
             original_log_probs_list, token_ids_list, masked_indices_list, tokens_tensor, mask_tensor = \
                 model.get_batch_generation(sentences_b, logger=logger)
 
+            if use_prob:  # use prob instead of log prob
+                original_log_probs_list = original_log_probs_list.exp()
+
             if dynamic == 'real_lm' or dynamic.startswith('real_lm_topk'):
                 sentences_b_mask_rel = [s['tokenized_sentences'][0] for s in samples_b_this]
                 relation_mask = [s['tokenized_sentences'][1] for s in samples_b_this]
@@ -543,10 +546,6 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                     filtered_log_probs_list_merge.extend(filtered_log_probs_list)
                     consist_score_li.append(consist_score)
 
-        # SHAPE: (batch_size, num_temp, filter_vocab_size)
-        filtered_log_probs_list_merge = torch.stack(filtered_log_probs_list_merge, 0).view(
-            len(sentences_b_all), len(filtered_log_probs_list_merge) // len(sentences_b_all), -1).permute(1, 0, 2)
-
         label_index_list = []
         for sample in samples_b:
             obj_label_id = model.get_id(sample["obj_label"])
@@ -571,13 +570,18 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
 
             label_index_list.append(obj_label_id)
 
-        # SHAPE: (batch_size)
-        label_index_tensor = torch.tensor([index_list.index(li[0]) for li in label_index_list])
-        c_inc = np.array(metrics.analyze_prob(
-            filtered_log_probs_list_merge, label_index_tensor, output=False, method='sample'))
-        c_inc_stat += c_inc
+        if dynamic.startswith('real_lm_topk') or dynamic.startswith('obj_lm_topk'):  # analyze prob
+            # SHAPE: (batch_size, num_temp, filter_vocab_size)
+            filtered_log_probs_list_merge = torch.stack(filtered_log_probs_list_merge, 0).view(
+                len(sentences_b_all), len(filtered_log_probs_list_merge) // len(sentences_b_all), -1).permute(1, 0, 2)
 
-        if dynamic.startswith('real_lm_topk') or dynamic.startswith('obj_lm_topk'):
+            # SHAPE: (batch_size)
+            label_index_tensor = torch.tensor([index_list.index(li[0]) for li in label_index_list])
+            c_inc = np.array(metrics.analyze_prob(
+                filtered_log_probs_list_merge, label_index_tensor, output=False, method='sample'))
+            c_inc_stat += c_inc
+
+        if dynamic.startswith('real_lm_topk') or dynamic.startswith('obj_lm_topk'):  # dynamic ensemble
             real_lm_topk = min(int(dynamic[dynamic.find('topk') + 4:]), len(consist_score_li))
             # SHAPE: (batch_size, num_temp)
             consist_score_li = torch.stack(consist_score_li, -1)
