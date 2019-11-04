@@ -533,7 +533,7 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                                            enumerate(original_log_probs_list)]
 
             if dynamic.startswith('bt_topk'):
-                obj_topk = int(dynamic.rsplit('_', 1)[1])
+                obj_topk = int(dynamic.rsplit('-', 1)[1])
                 top_obj_pred = [flp.topk(k=obj_topk) for flp in filtered_log_probs_list]
                 top_obj_logprob, top_obj_pred = zip(*top_obj_pred)
 
@@ -644,7 +644,7 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                 dynamic.startswith('obj_lm_topk') or \
                 dynamic.startswith('obj_lmgap_topk') or \
                 dynamic.startswith('bt_topk'):  # dynamic ensemble
-            real_lm_topk = min(int(dynamic[dynamic.find('topk') + 4:].split('_')[0]), len(consist_score_li))
+            real_lm_topk = min(int(dynamic[dynamic.find('topk') + 4:].split('-')[0]), len(consist_score_li))
             # SHAPE: (batch_size, num_temp)
             consist_score_li = torch.stack(consist_score_li, -1)
             # SHAPE: (batch_size, topk)

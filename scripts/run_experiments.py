@@ -261,7 +261,7 @@ def get_test_phrase_parameters(args):
     refine_template = 'test.out'
     get_objs = False
     batch_size = 32
-    dynamic = 'bt_topk1_3'
+    dynamic = 'bt_topk1-3'
     use_prob = False
     return relations, data_path_pre, data_path_post, None, get_objs, batch_size, dynamic, use_prob
 
