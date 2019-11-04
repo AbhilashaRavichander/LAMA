@@ -25,6 +25,7 @@ import time, sys
 import numpy as np
 import torch
 import torch.nn.functional as F
+from copy import deepcopy
 
 
 def load_file(filename):
@@ -527,11 +528,14 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                 filtered_log_probs_list = [
                     flp[masked_indices_list[ind][0]].index_select(dim=-1, index=filter_logprob_indices)
                     for ind, flp in enumerate(original_log_probs_list)]
-                top1_obj_pred = [vocab_subset[flp.argmax(0).item()] for flp in filtered_log_probs_list]
             else:
                 filtered_log_probs_list = [flp[masked_indices_list[ind][0]] for ind, flp in
                                            enumerate(original_log_probs_list)]
-                top1_obj_pred = [model.vocab[flp.argmax(0).item()] for flp in filtered_log_probs_list]
+
+            if dynamic.startswith('bt_topk'):
+                obj_topk = int(dynamic.rsplit('_', 1)[1])
+                top_obj_pred = [flp.topk(k=obj_topk) for flp in filtered_log_probs_list]
+                top_obj_logprob, top_obj_pred = zip(*top_obj_pred)
 
             if dynamic.startswith('obj_lm_topk'):
                 # use highest obj prob as consistency score
@@ -543,21 +547,33 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
             elif dynamic.startswith('bt_topk'):
                 # use the highest obj to "back translate" sub
                 def replace_list(li, from_ele, to_ele):
+                    li = deepcopy(li)
                     li[li.index(from_ele)] = to_ele
                     return li
-                sentences_b_mask_sub = [[replace_list(s['sub_masked_sentences'][0][0], base.MASK, obj_pred)]
-                                        for s, obj_pred in zip(samples_b_this, top1_obj_pred)]
-                sub_mask = [s['sub_masked_sentences'][1] for s in samples_b_this]
-                # TODO: only masked lm can do this
-                consist_log_probs_list, _, _, tokens_tensor, mask_tensor = \
-                    model.get_batch_generation(sentences_b_mask_sub, logger=logger, relation_mask=sub_mask)
-                # use avg prob of the sub as score
-                mask_tensor = mask_tensor.float()
-                consist_log_probs_list_flat = consist_log_probs_list.view(-1, consist_log_probs_list.size(-1))
-                token_logprob = torch.gather(consist_log_probs_list_flat, dim=1, index=tokens_tensor.view(-1, 1)).view(
-                    *consist_log_probs_list.size()[:2])
-                token_logprob = token_logprob * mask_tensor
-                consist_score = token_logprob.sum(-1) / mask_tensor.sum(-1)  # normalized prob
+
+                consist_score_obj_topk = []
+                used_vocab = vocab_subset if vocab_subset is not None else model.vocab
+                for obj_i in range(obj_topk):
+                    sentences_b_mask_sub = [[replace_list(s['sub_masked_sentences'][0][0], base.MASK, used_vocab[obj_pred[obj_i].item()])]
+                                            for s, obj_pred in zip(samples_b_this, top_obj_pred)]
+                    sub_mask = [s['sub_masked_sentences'][1] for s in samples_b_this]
+                    # TODO: only masked lm can do this
+                    consist_log_probs_list, _, _, tokens_tensor, mask_tensor = \
+                        model.get_batch_generation(sentences_b_mask_sub, logger=logger, relation_mask=sub_mask)
+                    # use avg prob of the sub as score
+                    mask_tensor = mask_tensor.float()
+                    consist_log_probs_list_flat = consist_log_probs_list.view(-1, consist_log_probs_list.size(-1))
+                    token_logprob = torch.gather(consist_log_probs_list_flat, dim=1, index=tokens_tensor.view(-1, 1)).view(
+                        *consist_log_probs_list.size()[:2])
+                    token_logprob = token_logprob * mask_tensor
+                    consist_score = token_logprob.sum(-1) / mask_tensor.sum(-1)  # normalized prob
+                    consist_score_obj_topk.append(consist_score)
+
+                # SHAPE: (batch_size, obj_topk)
+                consist_score_obj_topk = torch.stack(consist_score_obj_topk).permute(1, 0)
+                consist_score_weight = torch.stack(top_obj_logprob).exp()
+                # SHAPE: (batch_size)
+                consist_score = (consist_score_obj_topk * consist_score_weight).sum(-1) / (consist_score_weight.sum(-1) + 1e-10)
 
             # add to overall probability
             if filtered_log_probs_list_merge is None:
@@ -628,7 +644,7 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                 dynamic.startswith('obj_lm_topk') or \
                 dynamic.startswith('obj_lmgap_topk') or \
                 dynamic.startswith('bt_topk'):  # dynamic ensemble
-            real_lm_topk = min(int(dynamic[dynamic.find('topk') + 4:]), len(consist_score_li))
+            real_lm_topk = min(int(dynamic[dynamic.find('topk') + 4:].split('_')[0]), len(consist_score_li))
             # SHAPE: (batch_size, num_temp)
             consist_score_li = torch.stack(consist_score_li, -1)
             # SHAPE: (batch_size, topk)
