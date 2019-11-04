@@ -31,10 +31,28 @@ ana() {
     done
 }
 
+get_ht() {
+    set -e
+    mkdir -p ${1}
+    for file in data/TREx/*; do
+        bfile=$(basename "${file}")
+        echo ${bfile}
+        python scripts/run_experiments.py \
+            --rel_file data/TREx_mine/temp/${bfile} \
+            --prefix data/TREx/ \
+            --suffix .jsonl \
+            --top 1 \
+            --get_objs \
+            --batch_size 32 > ${1}/${bfile}.out 2>&1
+    done
+}
+
 if [[ $1 == 'eval' ]]; then
     eval $2 $3
 elif [[ $1 == 'ana' ]]; then
     ana $2
+elif [[ $1 == 'get_ht' ]]; then
+    get_ht $2
 elif [[ $1 == 'other' ]]; then
     echo other
 fi

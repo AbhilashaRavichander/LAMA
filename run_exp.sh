@@ -51,7 +51,9 @@ get_temp_ensemble_score() {
 }
 
 get_temp_ensemble_dynamic_score() {
-    mkdir -p ${3}${4}_objlm${5}
+    outdir=${3}${4}_$(echo "${5}" | sed -r 's/_//g')
+    mkdir -p ${outdir}
+    echo ${outdir}
     for file in ${1}/*; do
         bfile=$(basename "${file}")
         echo ${bfile}
@@ -61,8 +63,8 @@ get_temp_ensemble_dynamic_score() {
             --suffix .jsonl \
             --top ${4} \
             --ensemble \
-            --dynamic obj_lm_topk${5} \
-            --batch_size 32 > ${3}${4}_objlm${5}/${bfile}.out 2>&1
+            --dynamic ${5} \
+            --batch_size 32 > ${outdir}/${bfile}.out 2>&1
     done
 }
 
@@ -93,13 +95,25 @@ for file in data/TREx/*; do
 done
 
 # evaluate using the top k templates
-for top in 1 2 3 4
+for top in 1 2 3
 do
     get_temp_ensemble_score ${sort_temp_dir} data/TREx/ ${sort_temp_score_dir} ${top} &
 done
 wait
 
-for top in 5 10000
+for top in 4 5 6
+do
+    get_temp_ensemble_score ${sort_temp_dir} data/TREx/ ${sort_temp_score_dir} ${top} &
+done
+wait
+
+for top in 7 8 9
+do
+    get_temp_ensemble_score ${sort_temp_dir} data/TREx/ ${sort_temp_score_dir} ${top} &
+done
+wait
+
+for top in 10 10000
 do
     get_temp_ensemble_score ${sort_temp_dir} data/TREx/ ${sort_temp_score_dir} ${top} &
 done
@@ -107,17 +121,29 @@ wait
 
 : '
 # evaluate using dynamic top k templates
+#set -e
 sort_top=10
+dyn_algo=bt_topk
+beam=3
 for dyn_top in 1 2 3
 do
-    get_temp_ensemble_dynamic_score ${sort_temp_dir} data/TREx/ ${sort_temp_score_dir} ${sort_top} ${dyn_top} &
+    CUDA_VISIBLE_DEVICES=5 get_temp_ensemble_dynamic_score ${sort_temp_dir} data/TREx/ ${sort_temp_score_dir} ${sort_top} ${dyn_algo}${dyn_top}-${beam} &
 done
 
-for dyn_top in 4 5
+for dyn_top in 4 5 6
 do
-    get_temp_ensemble_dynamic_score ${sort_temp_dir} data/TREx/ ${sort_temp_score_dir} ${sort_top} ${dyn_top} &
+    CUDA_VISIBLE_DEVICES=4 get_temp_ensemble_dynamic_score ${sort_temp_dir} data/TREx/ ${sort_temp_score_dir} ${sort_top} ${dyn_algo}${dyn_top}-${beam} &
+done
+
+for dyn_top in 7 8 9
+do
+    CUDA_VISIBLE_DEVICES=3 get_temp_ensemble_dynamic_score ${sort_temp_dir} data/TREx/ ${sort_temp_score_dir} ${sort_top} ${dyn_algo}${dyn_top}-${beam} &
+done
+
+for dyn_top in 10
+do
+    CUDA_VISIBLE_DEVICES=2 get_temp_ensemble_dynamic_score ${sort_temp_dir} data/TREx/ ${sort_temp_score_dir} ${sort_top} ${dyn_algo}${dyn_top}-${beam} &
 done
 wait
 '
-
 echo done

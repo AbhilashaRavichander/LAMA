@@ -452,8 +452,9 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
         samples_batches_li.append(samples_batches)
         sentences_batches_li.append(sentences_batches)
 
-        obj_labels = [sample['obj_label'] for batch in samples_batches for sample in batch]
-        print('obj_labels {}'.format('\t'.join(map(str, obj_labels))))
+        sub_obj_labels = [(sample['sub_label'], sample['obj_label'])
+                          for batch in samples_batches for sample in batch]
+        print('sub_obj_label {}'.format('\t'.join(map(lambda p: '{}\t{}'.format(*p), sub_obj_labels))))
         if get_objs:
             return
 

@@ -32,8 +32,9 @@ def out_ana(args):
     if args.obj_file:
         with open(args.obj_file, 'r') as fin:
             for l in fin:
-                if l.startswith('obj_labels'):
+                if l.startswith('sub_obj_label'):
                     objs = l.strip().split(' ', 1)[1].split('\t')
+                    objs = objs[1:len(objs):2]
         uni, counts = np.unique(objs, return_counts=True)
         counts = counts / np.sum(counts)
         obj_entropy = scipy.stats.entropy(counts)
@@ -256,10 +257,42 @@ def get_ppdb(args):
         time.sleep(5)
 
 
+def case_ana(args):
+    topk = 2
+    if args.obj_file:
+        with open(args.obj_file, 'r') as fin:
+            for l in fin:
+                if l.startswith('sub_obj_label'):
+                    objs = l.strip().split(' ', 1)[1].split('\t')
+                    sub_obj = np.array([(objs[i], objs[i + 1]) for i in range(0, len(objs), 2)])
+                    break
+    stat = []
+    templates = []
+    with open(args.inp, 'r') as fin:
+        for l in fin:
+            if l.startswith('P1all '):
+                stat.append(list(map(float, l.strip().split(' ')[1].split('\t'))))
+            elif l.startswith("{'dataset_filename':"):
+                templates.append(eval(l.strip())['template'])
+    stat = np.array(stat)
+    templates = np.array(templates)
+    
+    temp_rank = np.argsort(-stat.mean(-1))
+    solved_by_topk = stat[temp_rank[:topk]].max(0)
+    filtered_stat = stat * (1 - solved_by_topk).reshape(1, -1)
+    filtered_temp_rank = np.argsort(-filtered_stat.mean(-1))
+
+    print('top temp: {}'.format(templates[temp_rank[:topk]]))
+    for i, rank in enumerate(filtered_temp_rank):
+        print('#{} {}'.format(i + 1, templates[rank]))
+        print('head-tails {}'.format(sub_obj[filtered_stat[rank] == 1]))
+        input()
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='analyze output log')
     parser.add_argument('--task', type=str, help='task', required=True, 
-        choices=['out', 'wikidata', 'sort', 'major_class', 'get_train_data', 'get_ppdb'])
+        choices=['out', 'wikidata', 'sort', 'major_class', 'get_train_data', 'get_ppdb', 'case'])
     parser.add_argument('--inp', type=str, help='input file')
     parser.add_argument('--obj_file', type=str, help='obj file', default=None)
     parser.add_argument('--out', type=str, help='output file')
@@ -277,4 +310,5 @@ if __name__ == '__main__':
         get_train_data(args)
     elif args.task == 'get_ppdb':
         get_ppdb(args)
-
+    elif args.task == 'case':
+        case_ana(args)
