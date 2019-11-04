@@ -7,6 +7,9 @@ from collections import defaultdict
 import scipy.stats
 from random import shuffle
 from tqdm import tqdm
+import urllib.request
+import urllib.parse
+import time
 
 
 def avg_by_label(scores: List, labels: Union[List, None]):
@@ -189,10 +192,74 @@ def get_train_data(args, top=1000):
                 fout.write(json.dumps(rel) + '\n')
 
 
+def parse_ppdb_result(response: str):
+    response = json.loads(response)['hits']
+    num = response['found']
+    hits = [{
+        'target': h['target'],
+        'score': h['default_formula_expr'],
+        'id': h['id']
+    } for h in response['hit']]
+    return num, hits
+
+
+def query_ppdb(source: str):
+    base_url = 'http://paraphrase.org/api/en/search/?'
+    param = {
+        'batchNumber': 0,
+        'needsPOSList': False,
+        'q': source
+    }
+    count = 0
+    results = []
+    found_parahrase = set()
+    while True:
+        param['batchNumber'] = count
+        url = base_url + '&' + urllib.parse.urlencode(param)
+        #print(url)
+        _, hits = parse_ppdb_result(urllib.request.urlopen(url).read().decode('utf-8'))
+        if len(hits) == 0:
+            break
+        count += 1
+        for hit in hits:
+            if hit['target'] in found_parahrase:
+                continue
+            found_parahrase.add(hit['target'])
+            results.append(hit)
+        time.sleep(1)
+    print('found {} pharaphrase for "{}"'.format(len(results), source))
+    return results
+
+
+def get_ppdb(args):
+    relations = []
+    with open(args.inp, 'r') as fin:
+        for l in fin:
+            relations.append(json.loads(l))
+    for rel in relations:
+        extend_rels = [rel]
+        pid = rel['relation']
+        temp = rel['template']
+        if temp.startswith('[X]') or temp.startswith('[Y]'):
+            results = query_ppdb(temp[3:-5].strip())
+            for r in results:
+                extend_rels.append({
+                    'relation': pid,
+                    'template': temp[:4] + r['target'] + temp[-6:],
+                    'type': rel['type'],
+                    'ppdb_id': r['id'],
+                    'ppdb_score': r['score']
+                })
+        with open(os.path.join(args.out, pid + '.jsonl'), 'w') as fout:
+            for r in extend_rels:
+                fout.write(json.dumps(r) + '\n')
+        time.sleep(5)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='analyze output log')
     parser.add_argument('--task', type=str, help='task', required=True, 
-        choices=['out', 'wikidata', 'sort', 'major_class', 'get_train_data'])
+        choices=['out', 'wikidata', 'sort', 'major_class', 'get_train_data', 'get_ppdb'])
     parser.add_argument('--inp', type=str, help='input file')
     parser.add_argument('--obj_file', type=str, help='obj file', default=None)
     parser.add_argument('--out', type=str, help='output file')
@@ -208,3 +275,6 @@ if __name__ == '__main__':
         major_class(args)
     elif args.task == 'get_train_data':
         get_train_data(args)
+    elif args.task == 'get_ppdb':
+        get_ppdb(args)
+
