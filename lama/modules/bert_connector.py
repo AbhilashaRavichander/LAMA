@@ -101,6 +101,11 @@ class Bert(Base_Connector):
     def model(self):
         return self.masked_bert_model
 
+    def tokenize(self, text: str):
+        return self.tokenizer.tokenize(text)
+
+
+
     def get_id(self, string):
         tokenized_text = self.tokenizer.tokenize(string)
         indexed_string = self.tokenizer.convert_tokens_to_ids(tokenized_text)
@@ -240,7 +245,7 @@ class Bert(Base_Connector):
     def _cuda(self):
         self.masked_bert_model.cuda()
 
-    def get_batch_generation(self, sentences_list, logger= None, try_cuda=True, relation_mask=None):
+    def get_batch_generation(self, sentences_list, logger=None, try_cuda=True, relation_mask=None):
         if not sentences_list:
             return None
         if try_cuda:

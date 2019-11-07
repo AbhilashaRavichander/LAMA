@@ -88,6 +88,13 @@ class Base_Connector():
     def model(self):
         raise NotImplementedError
 
+    @property
+    def mask_token(self):
+        return MASK
+
+    def tokenize(self, text: str):
+        raise NotImplementedError
+
     def optimize_top_layer(self, vocab_subset):
         """
         optimization for some LM

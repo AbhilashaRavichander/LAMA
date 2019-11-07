@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 #
 import sys
+import logging
 from os.path import dirname, abspath
 sys.path.insert(0, dirname(dirname(abspath(__file__))))
 print(dirname(dirname(abspath(__file__))))
@@ -25,15 +26,11 @@ from collections import defaultdict
 
 LMs = [
     {
-        "lm":
-        "transformerxl",
-        "label":
-        "transformerxl",
+        "lm": "transformerxl",
+        "label": "transformerxl",
         "models_names": ["transformerxl"],
-        "transformerxl_model_name":
-        'transfo-xl-wt103',
-        "transformerxl_model_dir":
-        "pre-trained_language_models/transformerxl/transfo-xl-wt103/"
+        "transformerxl_model_name": 'transfo-xl-wt103',
+        "transformerxl_model_dir": "pre-trained_language_models/transformerxl/transfo-xl-wt103/"
     },
     {
         "lm": "elmo",
@@ -54,15 +51,11 @@ LMs = [
         "elmo_warm_up_cycles": 10
     },
     {
-        "lm":
-        "bert",
-        "label":
-        "bert_base",
+        "lm": "bert",
+        "label": "bert_base",
         "models_names": ["bert"],
-        "bert_model_name":
-        "bert-base-cased",
-        "bert_model_dir":
-        "pre-trained_language_models/bert/cased_L-12_H-768_A-12"
+        "bert_model_name": "bert-base-cased",
+        "bert_model_dir": "pre-trained_language_models/bert/cased_L-12_H-768_A-12"
     },
     {
         "lm": "bert",
@@ -75,18 +68,24 @@ LMs = [
 
 LMs = [
     {
-        "lm":
-        "bert",
-        "label":
-        "bert_base",
+        "lm": "bert",
+        "label": "bert_base",
         "models_names": ["bert"],
-        "bert_model_name":
-        "bert-base-cased",
-        "bert_model_dir":
-        "pre-trained_language_models/bert/cased_L-12_H-768_A-12"
+        "bert_model_name": "bert-base-cased",
+        "bert_model_dir": "pre-trained_language_models/bert/cased_L-12_H-768_A-12"
     }
 ]
 
+LMs = [
+    {
+        "lm": "roberta",
+        "label": "roberta_base",
+        "models_names": ["roberta"],
+        "roberta_model_name": "model.pt",
+        "roberta_model_dir": "pre-trained_language_models/roberta/roberta.base",
+        "roberta_vocab_name": "dict.txt"
+    }
+]
 
 def run_experiments(
     relations,
@@ -261,7 +260,7 @@ def get_test_phrase_parameters(args):
     refine_template = 'test.out'
     get_objs = False
     batch_size = 32
-    dynamic = 'bt_topk1-3'
+    dynamic = 'none'
     use_prob = False
     return relations, data_path_pre, data_path_post, None, get_objs, batch_size, dynamic, use_prob
 
@@ -304,7 +303,7 @@ if __name__ == "__main__":
     parameters = get_Squad_parameters()
     run_all_LMs(parameters)
     '''
-
+    logging.disable(logging.WARNING)
     parser = argparse.ArgumentParser(description='run exp for multiple relational phrase')
     parser.add_argument('--rel_file', type=str, default='data/Google_RE_patty_template/place_of_death.jsonl')
     parser.add_argument('--refine_template', type=str, default=None)

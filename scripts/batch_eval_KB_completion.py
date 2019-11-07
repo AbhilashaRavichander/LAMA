@@ -60,20 +60,20 @@ def parse_template(template, subject_label, object_label):
     return [template]
 
 
-def parse_template_tokenize(template, subject_label, mask_label, model, mask_part='relation'):
+def parse_template_tokenize(template, subject_label, model, mask_part='relation'):
     assert mask_part in {'relation', 'sub'}
     SUBJ_SYMBOL = "[X]"
     OBJ_SYMBOL = "[Y]"
     template.split()
     x_pos = template.index(SUBJ_SYMBOL)
     y_pos = template.index(OBJ_SYMBOL)
-    template = template.replace(SUBJ_SYMBOL, mask_label)
-    template = template.replace(OBJ_SYMBOL, mask_label)
-    toks = model.tokenizer.tokenize(template)
+    template = template.replace(SUBJ_SYMBOL, model.mask_token)
+    template = template.replace(OBJ_SYMBOL, model.mask_token)
+    toks = model.tokenize(template)
     all_mask = []
     mask_pos = []
     for i, tok in enumerate(toks):
-        if tok == mask_label:
+        if tok == model.mask_token:
             all_mask.append(0)
             mask_pos.append(i)
         elif mask_part == 'relation':
@@ -82,7 +82,7 @@ def parse_template_tokenize(template, subject_label, mask_label, model, mask_par
             all_mask.append(0)
     assert len(mask_pos) == 2, 'not binary relation'
     ind = mask_pos[0] if x_pos < y_pos else mask_pos[1]
-    sub_toks = model.tokenizer.tokenize(subject_label)
+    sub_toks = model.tokenize(subject_label)
     toks = toks[:ind] + sub_toks + toks[ind + 1:]
     if mask_part == 'relation':
         all_mask = all_mask[:ind] + ([0] * len(sub_toks)) + all_mask[ind + 1:]
@@ -419,15 +419,15 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                 sample["obj_label"] = obj
                 # sobstitute all sentences with a standard template
                 sample["masked_sentences"] = parse_template(
-                    template.strip(), sample["sub_label"].strip(), base.MASK
+                    template.strip(), sample["sub_label"].strip(), model.mask_token
                 )
                 if dynamic.startswith('bt_topk'):
                     sample['sub_masked_sentences'] = parse_template_tokenize(
-                        template.strip(), sample["sub_label"].strip(), base.MASK, model, mask_part='sub'
+                        template.strip(), sample["sub_label"].strip(), model, mask_part='sub'
                     )
                 if dynamic == 'real_lm' or dynamic.startswith('real_lm_topk'):
                     sample["tokenized_sentences"] = parse_template_tokenize(
-                        template.strip(), sample["sub_label"].strip(), base.MASK, model, mask_part='relation'
+                        template.strip(), sample["sub_label"].strip(), model, mask_part='relation'
                     )
                 # substitute sub and obj placeholder in template with corresponding str
                 # and add bracket to the relational phrase
@@ -555,7 +555,7 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                 consist_score_obj_topk = []
                 used_vocab = vocab_subset if vocab_subset is not None else model.vocab
                 for obj_i in range(obj_topk):
-                    sentences_b_mask_sub = [[replace_list(s['sub_masked_sentences'][0][0], base.MASK, used_vocab[obj_pred[obj_i].item()])]
+                    sentences_b_mask_sub = [[replace_list(s['sub_masked_sentences'][0][0], model.mask_token, used_vocab[obj_pred[obj_i].item()])]
                                             for s, obj_pred in zip(samples_b_this, top_obj_pred)]
                     sub_mask = [s['sub_masked_sentences'][1] for s in samples_b_this]
                     # TODO: only masked lm can do this
