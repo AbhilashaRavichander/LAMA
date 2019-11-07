@@ -205,6 +205,9 @@ class Roberta(Base_Connector):
             new_sent[pos] = self.mask_token   # replace the token at pos with a mask
             return new_sent
 
+        if try_cuda:
+            self.try_cuda()
+
         try_num = 0
         while True:
             modify_num = 0
@@ -236,7 +239,9 @@ class Roberta(Base_Connector):
 
                 # SHAPE: (one token len)
                 replace = probs_sum.max(-1)[1]
-                replace = self.model.decode(replace)
+                replace = self.model.decode(replace.cpu())
+                if type(replace) is not list:
+                    replace = [replace]
                 if len(replace) > 1:
                     '''
                     dst[dst == -1] = 0

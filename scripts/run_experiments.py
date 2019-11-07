@@ -251,14 +251,14 @@ def get_test_phrase_parameters(args):
     #relations = [{'relation': 'P27', 'template': '[X] what a terrorist incident in [Y] .'}]
     #relations = [{'relation': 'P27', 'template': '[X] is an [Y] citizen .'}]
     #relations = [{"relation": "P1001", "template": "[X] is the first,,,,andandthe President of [Y] .", "label": None, "description": None, "type": "N-M", "wikipedia_count": 21, "old_template": "[X] in the australian state of [Y] ."}]
-    relations = [{"relation": "P108", "template": ["[X] works for [Y] .", "[Y] commentator [X] ."]}]
+    #relations = [{"relation": "P108", "template": ["[X] works for [Y] .", "[Y] commentator [X] ."]}]
     #relations = [{"relation": "P108", "template": ["[Y] commentator [X] ."]}]
     #relations = [{"relation": "P108", "template": ["[X] works for [Y] ."]}]
     #relations = [{"relation": "P19", "template": ["[X] was born in [Y] .", "[X] label [Y] .", "[X] died at [Y] ."]}]
-    #relations = [{"relation": "P19", "template": "[X] is born in [Y] ."}]
+    relations = [{"relation": "P19", "template": "[X] is born in [Y] ."}]
     data_path_pre = "data/TREx/"
     data_path_post = ".jsonl"
-    refine_template = None  #'test.out'
+    refine_template = 'test.out'
     get_objs = False
     batch_size = 32
     dynamic = 'none'
