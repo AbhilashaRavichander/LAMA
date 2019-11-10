@@ -303,7 +303,14 @@ def filter_samples(model, samples, vocab_subset, max_sentence_length, template):
     return new_samples, msg
 
 
-def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=False, dynamic='none', use_prob=False):
+def main(args,
+         shuffle_data=True,
+         model=None,
+         refine_template=False,
+         get_objs=False,
+         dynamic='none',
+         use_prob=False,
+         temp_model=None):
 
     if len(args.models_names) > 1:
         raise ValueError('Please specify a single language model (e.g., --lm "bert").')
@@ -312,7 +319,7 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
 
     [model_type_name] = args.models_names
 
-    print(model)
+    #print(model)
     if model is None:
         model = build_model_by_name(model_type_name, args)
 
@@ -374,8 +381,6 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
 
     data = load_file(args.dataset_filename)
 
-    print(len(data))
-
     if args.lowercase:
         # lowercase all samples
         logger.info("lowercasing all samples...")
@@ -396,8 +401,7 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
 
     logger.info("\n" + ret_msg + "\n")
 
-    print(len(all_samples))
-    perm = np.random.permutation(len(all_samples))
+    print('#head-tails {} -> {}'.format(len(data), len(all_samples)))
 
     samples_batches_li, sentences_batches_li = [], []
     for template in args.template:
@@ -445,7 +449,8 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
 
         # shuffle data
         if shuffle_data:
-            new_all_samples = new_all_samples[perm]
+            perm = np.random.permutation(len(new_all_samples))
+            new_all_samples = np.array(new_all_samples)[perm]
 
         samples_batches, sentences_batches, ret_msg = batchify(new_all_samples, args.batch_size)
         logger.info("\n" + ret_msg + "\n")
@@ -454,8 +459,8 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
 
         sub_obj_labels = [(sample['sub_label'], sample['obj_label'])
                           for batch in samples_batches for sample in batch]
-        print('sub_obj_label {}'.format('\t'.join(map(lambda p: '{}\t{}'.format(*p), sub_obj_labels))))
         if get_objs:
+            print('sub_obj_label {}'.format('\t'.join(map(lambda p: '{}\t{}'.format(*p), sub_obj_labels))))
             return
 
         if refine_template:
@@ -479,6 +484,8 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
 
     c_inc_meaning = ['top12 prob gap', 'top1 prob']
     c_inc_stat = np.zeros((2, 3))  # [[*, c_num], [*, inc_num]]
+
+    loss_list = []
 
     for i in tqdm(range(len(samples_batches_li))):
 
@@ -587,7 +594,7 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                         dynamic.startswith('bt_topk'):
                     consist_score_li.append(consist_score)
             else:
-                if dynamic == 'none':
+                if dynamic == 'none' and temp_model is None:
                     filtered_log_probs_list_merge = \
                         [a + b for a, b in zip(filtered_log_probs_list_merge, filtered_log_probs_list)]
                 elif dynamic == 'lm' or dynamic == 'real_lm':
@@ -602,6 +609,8 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                         dynamic.startswith('bt_topk'):
                     filtered_log_probs_list_merge.extend(filtered_log_probs_list)
                     consist_score_li.append(consist_score)
+                elif temp_model is not None:
+                    filtered_log_probs_list_merge.extend(filtered_log_probs_list)
 
         label_index_list = []
         for sample in samples_b:
@@ -630,7 +639,8 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
         if dynamic.startswith('real_lm_topk') or \
                 dynamic.startswith('obj_lm_topk') or \
                 dynamic.startswith('obj_lmgap_topk') or \
-                dynamic.startswith('bt_topk'):  # analyze prob
+                dynamic.startswith('bt_topk') or \
+                temp_model is not None:  # analyze prob
             # SHAPE: (batch_size, num_temp, filter_vocab_size)
             filtered_log_probs_list_merge = torch.stack(filtered_log_probs_list_merge, 0).view(
                 len(sentences_b_all), len(filtered_log_probs_list_merge) // len(sentences_b_all), -1).permute(1, 0, 2)
@@ -639,7 +649,23 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
             label_index_tensor = torch.tensor([index_list.index(li[0]) for li in label_index_list])
             c_inc = np.array(metrics.analyze_prob(
                 filtered_log_probs_list_merge, label_index_tensor, output=False, method='sample'))
+            #print(filtered_log_probs_list_merge[0])
+            #input()
             c_inc_stat += c_inc
+
+        if temp_model is not None:  # optimize template weights
+            temp_model_, optimizer = temp_model
+            if optimizer is None:  # predict
+                filtered_log_probs_list_merge = temp_model_(
+                    args.relation, filtered_log_probs_list_merge.detach(), target=None)
+            else:  # train
+                optimizer.zero_grad()
+                loss = temp_model_(
+                    args.relation, filtered_log_probs_list_merge.detach(), target=label_index_tensor.detach())
+                loss.backward()
+                optimizer.step()
+                loss_list.append(loss.item())
+                continue
 
         if dynamic.startswith('real_lm_topk') or \
                 dynamic.startswith('obj_lm_topk') or \
@@ -757,6 +783,9 @@ def main(args, shuffle_data=True, model=None, refine_template=False, get_objs=Fa
                     Precision_positivie += sample_P
 
             list_of_results.append(element)
+
+    if temp_model is not None and temp_model[1] is not None:
+        return np.mean(loss_list)
 
     pool.close()
     pool.join()

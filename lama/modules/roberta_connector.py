@@ -163,11 +163,12 @@ class Roberta(Base_Connector):
             # with utils.eval(self.model.model):
             self.model.eval()
             self.model.model.eval()
-            log_probs, extra = self.model.model(
+            logits, extra = self.model.model(
                 batch_tokens.to(device=self._model_device),
                 features_only=False,
                 return_all_hiddens=False,
             )
+            log_probs = logits.log_softmax(dim=-1)
 
         mask_tensor = (batch_tokens == self.task.mask_idx).long() if relation_mask is None else rel_mask_tensor
 

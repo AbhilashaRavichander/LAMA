@@ -35,6 +35,17 @@ get_temp_score() {
    done
 }
 
+optimize_temp_score() {
+    python scripts/run_experiments.py \
+        --rel_file ${1} \
+        --prefix ${2} \
+        --suffix .jsonl \
+        --temp_model mixture \
+        --save ${3} \
+        --batch_size 32 > ${4} 2>&1
+   done
+}
+
 get_temp_ensemble_score() {
     mkdir -p ${3}${4}
     for file in ${1}/*; do

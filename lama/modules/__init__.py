@@ -9,6 +9,7 @@ from .elmo_connector import Elmo
 from .gpt_connector import GPT
 from .transformerxl_connector import TransformerXL
 from .roberta_connector import Roberta
+from .template_model import TempModel
 
 
 def build_model_by_name(lm, args, verbose=True):

@@ -289,10 +289,48 @@ def case_ana(args):
         input()
 
 
+def merge_all_rel(args, top=None):
+    with open(args.out, 'w') as fout:
+        for root, dirs, files in os.walk(args.inp):
+            for file in files:
+                rel_name = file.rsplit('.', 1)[0]
+                rel_li = []
+                with open(os.path.join(root, file), 'r') as fin:
+                    for l in fin:
+                        rel_li.append(json.loads(l))
+                    temps = [rel['template'] for rel in rel_li]
+                    if top:
+                        temps = temps[:top]
+                    rel_li[0]['template'] = temps
+                fout.write(json.dumps(rel_li[0]) + '\n')
+
+
+def split_dev(args):
+    for root, dirs, files in os.walk(args.inp):
+        for file in files:
+            ls = []
+            with open(os.path.join(root, file), 'r') as fin:
+                for l in fin:
+                    ls.append(l.strip())
+            shuffle(ls)
+            split = int(len(ls) * 0.8)
+            if split == 0 or split >= len(ls):
+                raise Exception('empty split for {}'.format(file))
+            os.makedirs(root + '_train', exist_ok=True)
+            os.makedirs(root + '_train_dev', exist_ok=True)
+            with open(os.path.join(root + '_train', file), 'w') as fout:
+                for l in ls[:split]:
+                    fout.write(l + '\n')
+            with open(os.path.join(root + '_train_dev', file), 'w') as fout:
+                for l in ls[split:]:
+                    fout.write(l + '\n')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='analyze output log')
     parser.add_argument('--task', type=str, help='task', required=True, 
-        choices=['out', 'wikidata', 'sort', 'major_class', 'get_train_data', 'get_ppdb', 'case'])
+        choices=['out', 'wikidata', 'sort', 'major_class', 'get_train_data',
+                 'get_ppdb', 'case', 'merge_all_rel', 'split_dev'])
     parser.add_argument('--inp', type=str, help='input file')
     parser.add_argument('--obj_file', type=str, help='obj file', default=None)
     parser.add_argument('--out', type=str, help='output file')
@@ -312,3 +350,7 @@ if __name__ == '__main__':
         get_ppdb(args)
     elif args.task == 'case':
         case_ana(args)
+    elif args.task == 'merge_all_rel':
+        merge_all_rel(args, top=30)
+    elif args.task == 'split_dev':
+        split_dev(args)

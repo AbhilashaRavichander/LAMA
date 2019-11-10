@@ -14,6 +14,9 @@ import argparse
 from batch_eval_KB_completion import main as run_evaluation
 from batch_eval_KB_completion import load_file
 from lama.modules import build_model_by_name
+from lama.modules import TempModel
+import torch.optim as optim
+import torch
 import pprint
 import statistics
 from copy import deepcopy
@@ -75,7 +78,7 @@ LMs = [
         "bert_model_dir": "pre-trained_language_models/bert/cased_L-12_H-768_A-12"
     }
 ]
-
+'''
 LMs = [
     {
         "lm": "roberta",
@@ -86,6 +89,7 @@ LMs = [
         "roberta_vocab_name": "dict.txt"
     }
 ]
+'''
 
 def run_experiments(
     relations,
@@ -96,6 +100,9 @@ def run_experiments(
     batch_size,
     dynamic=None,
     use_prob=False,
+    temp_model=None,
+    save=None,
+    load=None,
     input_param={
         "lm": "bert",
         "label": "bert_large",
@@ -118,10 +125,33 @@ def run_experiments(
         new_relations = []
         templates_set = set()
 
+    rel2numtemp = {}
+    for relation in relations:  # collect templates
+        if 'template' in relation:
+            if type(relation['template']) is not list:
+                relation['template'] = [relation['template']]
+        rel2numtemp[relation['relation']] = len(relation['template'])
+
+    if temp_model is not None:
+        if temp_model == 'mixture':
+            temp_model = TempModel(rel2numtemp, enforce_prob=True)
+            temp_model.train()
+            optimizer = optim.Adam(temp_model.parameters(), lr=1e-3)
+            temp_model = (temp_model, optimizer)
+        else:
+            raise NotImplementedError
+
+        if load is not None:
+            print('load temp model from {}'.format(load))
+            temp_model[0].load_state_dict(torch.load(load))
+            temp_model[0].eval()
+            temp_model = (temp_model[0], None)
+
     for relation in relations:
         pp.pprint(relation)
         PARAMETERS = {
-            "dataset_filename": "{}{}{}".format(
+            "relation": relation["relation"],
+            "dataset_filename": "{}/{}{}".format(
                 data_path_pre, relation["relation"], data_path_post
             ),
             "common_vocab_filename": "pre-trained_language_models/common_vocab_cased.txt",
@@ -137,16 +167,19 @@ def run_experiments(
             "threads": -1,
             "interactive": False,
         }
+        dev_param = deepcopy(PARAMETERS)
+        dev_param['dataset_filename'] = '{}/{}{}'.format(data_path_pre + '_dev', relation['relation'], data_path_post)
 
-        if "template" in relation:
-            if type(relation['template']) is not list:
-                relation['template'] = [relation['template']]
-            PARAMETERS["template"] = relation['template']
+        if 'template' in relation:
+            PARAMETERS['template'] = relation['template']
+            dev_param['template'] = relation['template']
 
         PARAMETERS.update(input_param)
+        dev_param.update(input_param)
         print(PARAMETERS)
 
         args = argparse.Namespace(**PARAMETERS)
+        dev_args = argparse.Namespace(**dev_param)
 
         # see if file exists
         try:
@@ -160,9 +193,34 @@ def run_experiments(
             [model_type_name] = args.models_names
             model = build_model_by_name(model_type_name, args)
 
+        if temp_model is not None and temp_model[1] is not None:  # train temp model
+            max_dev_acc = -1e10
+            es = 0
+            for e in range(100):
+                loss = run_evaluation(args, shuffle_data=True, model=model,
+                                      refine_template=bool(refine_template),
+                                      get_objs=get_objs, dynamic=dynamic,
+                                      use_prob=use_prob, temp_model=temp_model)
+                dev_acc = run_evaluation(args, shuffle_data=False, model=model,
+                                          refine_template=bool(refine_template),
+                                          get_objs=get_objs, dynamic=dynamic,
+                                          use_prob=use_prob, temp_model=(temp_model[0], None))
+                if dev_acc > max_dev_acc:
+                    max_dev_acc = dev_acc
+                    es = 0
+                else:
+                    es += 1
+                    if es >= 3:  # early stop
+                        print('early stop')
+                        break
+                print('Loss\t{}\t{}\t{}'.format(relation['relation'], loss, dev_acc))
+            continue
+
         Precision1 = run_evaluation(args, shuffle_data=False, model=model,
                                     refine_template=bool(refine_template),
-                                    get_objs=get_objs, dynamic=dynamic, use_prob=use_prob)
+                                    get_objs=get_objs, dynamic=dynamic,
+                                    use_prob=use_prob, temp_model=temp_model)
+
         if get_objs:
             return
 
@@ -193,6 +251,11 @@ def run_experiments(
 
     if refine_template:
         refine_temp_fout.close()
+        return
+
+    if temp_model is not None:
+        if save is not None:
+            torch.save(temp_model[0].state_dict(), save)
         return
 
     mean_p1 = statistics.mean(all_Precision1)
@@ -243,8 +306,12 @@ def get_relation_phrase_parameters(args):
         relations = [relations[0]]
     data_path_pre = args.prefix
     data_path_post = args.suffix
+    temp_model = args.temp_model
+    save = args.save
+    load = args.load
     return relations, data_path_pre, data_path_post, args.refine_template, \
-           args.get_objs, args.batch_size, args.dynamic, args.use_prob
+           args.get_objs, args.batch_size, args.dynamic, args.use_prob, temp_model, \
+           save, load
 
 
 def get_test_phrase_parameters(args):
@@ -255,15 +322,21 @@ def get_test_phrase_parameters(args):
     #relations = [{"relation": "P108", "template": ["[Y] commentator [X] ."]}]
     #relations = [{"relation": "P108", "template": ["[X] works for [Y] ."]}]
     #relations = [{"relation": "P19", "template": ["[X] was born in [Y] .", "[X] label [Y] .", "[X] died at [Y] ."]}]
-    relations = [{"relation": "P19", "template": "[X] is born in [Y] ."}]
-    data_path_pre = "data/TREx/"
+    #relations = [{"relation": "P19", "template": "[X] is born in [Y] ."}]
+    relations = [{"relation": "P19", "template": ["[X] is born in [Y] .", "[X] died at [Y] ."]},
+                 {"relation": "P108", "template": ["[X] works for [Y] .", "[Y] commentator [X] ."]}]
+    data_path_pre = "data/TREx_train_train/"
     data_path_post = ".jsonl"
-    refine_template = 'test.out'
+    refine_template = None  #'test.out'
     get_objs = False
     batch_size = 32
     dynamic = 'none'
     use_prob = False
-    return relations, data_path_pre, data_path_post, refine_template, get_objs, batch_size, dynamic, use_prob
+    temp_model = 'mixture'
+    save = 'test.pt'
+    load = None
+    return relations, data_path_pre, data_path_post, refine_template, get_objs, \
+           batch_size, dynamic, use_prob, temp_model, save, load
 
 
 def get_ConceptNet_parameters(data_path_pre="data/"):
@@ -316,6 +389,9 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--dynamic', type=str, help='dynamically select template', default='none')
     parser.add_argument('--use_prob', help='use prob instead of log prob', action='store_true')
+    parser.add_argument('--temp_model', help='which temp model to use to learn temp weights', default=None)
+    parser.add_argument('--save', help='path to save temp model', default=None)
+    parser.add_argument('--load', help='path to load temp model', default=None)
     args = parser.parse_args()
     parameters = get_relation_phrase_parameters(args)
     #parameters = get_test_phrase_parameters(args)
