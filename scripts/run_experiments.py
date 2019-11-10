@@ -103,6 +103,7 @@ def run_experiments(
     temp_model=None,
     save=None,
     load=None,
+    feature_dir=None,
     input_param={
         "lm": "bert",
         "label": "bert_large",
@@ -133,19 +134,26 @@ def run_experiments(
         rel2numtemp[relation['relation']] = len(relation['template'])
 
     if temp_model is not None:
-        if temp_model == 'mixture':
-            temp_model = TempModel(rel2numtemp, enforce_prob=True)
-            temp_model.train()
-            optimizer = optim.Adam(temp_model.parameters(), lr=1e-3)
-            temp_model = (temp_model, optimizer)
+        if temp_model.startswith('mixture'):
+            method = temp_model.split('_')[1]
+            if method == 'optimize':  # (extract feature) + optimize
+                temp_model = TempModel(rel2numtemp, enforce_prob=True)
+                temp_model.train()
+                optimizer = optim.Adam(temp_model.parameters(), lr=1e-1)
+                temp_model = (temp_model, optimizer)
+            elif method == 'precompute':  # extract feature
+                temp_model = (None, 'precompute')
+            elif method == 'predict':  # predict
+                print('load temp model from {}'.format(load))
+                temp_model = TempModel(rel2numtemp, enforce_prob=True)
+                temp_model.eval()
+                temp_model.load_state_dict(torch.load(load))
+                temp_model.eval()
+                temp_model = (temp_model, None)
+            else:
+                raise NotImplementedError
         else:
             raise NotImplementedError
-
-        if load is not None:
-            print('load temp model from {}'.format(load))
-            temp_model[0].load_state_dict(torch.load(load))
-            temp_model[0].eval()
-            temp_model = (temp_model[0], None)
 
     for relation in relations:
         pp.pprint(relation)
@@ -193,28 +201,58 @@ def run_experiments(
             [model_type_name] = args.models_names
             model = build_model_by_name(model_type_name, args)
 
-        if temp_model is not None and temp_model[1] is not None:  # train temp model
-            max_dev_acc = -1e10
-            es = 0
-            for e in range(100):
-                loss = run_evaluation(args, shuffle_data=True, model=model,
-                                      refine_template=bool(refine_template),
-                                      get_objs=get_objs, dynamic=dynamic,
-                                      use_prob=use_prob, temp_model=temp_model)
-                dev_acc = run_evaluation(args, shuffle_data=False, model=model,
+        if temp_model is not None:
+            if temp_model[1] == 'precompute':
+                features = run_evaluation(args, shuffle_data=True, model=model,
                                           refine_template=bool(refine_template),
                                           get_objs=get_objs, dynamic=dynamic,
-                                          use_prob=use_prob, temp_model=(temp_model[0], None))
-                if dev_acc > max_dev_acc:
-                    max_dev_acc = dev_acc
+                                          use_prob=use_prob, temp_model=temp_model)
+                print('save features for {}'.format(relation['relation']))
+                torch.save(features, os.path.join(save, relation['relation'] + '.pt'))
+                continue
+            elif temp_model[1] is not None:  # train temp model
+                if feature_dir is None:
+                    max_dev_acc = -1e10
                     es = 0
+                    for e in range(100):
+                        loss = run_evaluation(args, shuffle_data=True, model=model,
+                                              refine_template=bool(refine_template),
+                                              get_objs=get_objs, dynamic=dynamic,
+                                              use_prob=use_prob, temp_model=temp_model)
+                        dev_acc = run_evaluation(args, shuffle_data=False, model=model,
+                                                  refine_template=bool(refine_template),
+                                                  get_objs=get_objs, dynamic=dynamic,
+                                                  use_prob=use_prob, temp_model=(temp_model[0], None))
+                        if dev_acc > max_dev_acc:
+                            max_dev_acc = dev_acc
+                            es = 0
+                        else:
+                            es += 1
+                            if es >= 3:  # early stop
+                                print('early stop')
+                                break
+                        print('Loss\t{}\t{}\t{}'.format(relation['relation'], loss, dev_acc))
                 else:
-                    es += 1
-                    if es >= 3:  # early stop
-                        print('early stop')
-                        break
-                print('Loss\t{}\t{}\t{}'.format(relation['relation'], loss, dev_acc))
-            continue
+                    temp_model_, optimizer = temp_model
+                    min_loss = 1e10
+                    es = 0
+                    for e in range(100):
+                        # SHAPE: (num_sample, num_temp)
+                        feature = torch.load(os.path.join(feature_dir, args.relation + '.pt'))
+                        #weight = feature.mean(0)
+                        #temp_model[0].set_weight(args.relation, weight)
+                        optimizer.zero_grad()
+                        loss = temp_model_(args.relation, feature)
+                        loss.backward()
+                        optimizer.step()
+                        if loss < min_loss:
+                            min_loss = loss
+                            es = 0
+                        else:
+                            es += 1
+                            if es >= 10:
+                                break
+                continue
 
         Precision1 = run_evaluation(args, shuffle_data=False, model=model,
                                     refine_template=bool(refine_template),
@@ -254,7 +292,7 @@ def run_experiments(
         return
 
     if temp_model is not None:
-        if save is not None:
+        if save is not None and temp_model[0] is not None:
             torch.save(temp_model[0].state_dict(), save)
         return
 
@@ -309,9 +347,10 @@ def get_relation_phrase_parameters(args):
     temp_model = args.temp_model
     save = args.save
     load = args.load
+    feature_dir = args.feature_dir
     return relations, data_path_pre, data_path_post, args.refine_template, \
            args.get_objs, args.batch_size, args.dynamic, args.use_prob, temp_model, \
-           save, load
+           save, load, feature_dir
 
 
 def get_test_phrase_parameters(args):
@@ -335,8 +374,9 @@ def get_test_phrase_parameters(args):
     temp_model = 'mixture'
     save = 'test.pt'
     load = None
+    feature_dir = None
     return relations, data_path_pre, data_path_post, refine_template, get_objs, \
-           batch_size, dynamic, use_prob, temp_model, save, load
+           batch_size, dynamic, use_prob, temp_model, save, load, feature_dir
 
 
 def get_ConceptNet_parameters(data_path_pre="data/"):
@@ -392,6 +432,7 @@ if __name__ == "__main__":
     parser.add_argument('--temp_model', help='which temp model to use to learn temp weights', default=None)
     parser.add_argument('--save', help='path to save temp model', default=None)
     parser.add_argument('--load', help='path to load temp model', default=None)
+    parser.add_argument('--feature_dir', help='dir to features', default=None)
     args = parser.parse_args()
     parameters = get_relation_phrase_parameters(args)
     #parameters = get_test_phrase_parameters(args)

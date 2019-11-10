@@ -486,6 +486,7 @@ def main(args,
     c_inc_stat = np.zeros((2, 3))  # [[*, c_num], [*, inc_num]]
 
     loss_list = []
+    features_list = []
 
     for i in tqdm(range(len(samples_batches_li))):
 
@@ -658,7 +659,15 @@ def main(args,
             if optimizer is None:  # predict
                 filtered_log_probs_list_merge = temp_model_(
                     args.relation, filtered_log_probs_list_merge.detach(), target=None)
-            else:  # train
+            elif optimizer == 'precompute':  # pre-compute and save featuers
+                lp = filtered_log_probs_list_merge
+                # SHAPE: (batch_size * num_temp)
+                features = torch.gather(lp.contiguous().view(-1, lp.size(-1)), dim=1,
+                                        index=label_index_tensor.repeat(lp.size(1)).view(-1, 1))
+                features = features.exp().view(-1, lp.size(1))
+                features_list.append(features)
+                continue
+            elif optimizer is not None:  # train on the fly
                 optimizer.zero_grad()
                 loss = temp_model_(
                     args.relation, filtered_log_probs_list_merge.detach(), target=label_index_tensor.detach())
@@ -784,8 +793,11 @@ def main(args,
 
             list_of_results.append(element)
 
-    if temp_model is not None and temp_model[1] is not None:
-        return np.mean(loss_list)
+    if temp_model is not None:
+        if temp_model[1] == 'precompute':
+            return torch.cat(features_list, 0)
+        if temp_model[1] is not None:
+            return np.mean(loss_list)
 
     pool.close()
     pool.join()
