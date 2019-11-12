@@ -452,6 +452,7 @@ def main(args,
         if shuffle_data:
             perm = np.random.permutation(len(new_all_samples))
             new_all_samples = np.array(new_all_samples)[perm]
+            raise Exception
 
         samples_batches, sentences_batches, ret_msg = batchify(new_all_samples, args.batch_size)
         logger.info("\n" + ret_msg + "\n")
@@ -500,7 +501,12 @@ def main(args,
         max_score = float('-inf')
         consist_score_li = []
 
+        samples_b_prev = None
         for sentences_b, samples_b_this in zip(sentences_b_all, samples_b_all):
+            if samples_b_prev is not None:
+                for ps, ts in zip(samples_b_prev, samples_b_this):
+                    assert ps['uuid'] == ts['uuid']
+
             # TODO: add tokens_tensor and mask_tensor for more models
             original_log_probs_list, token_ids_list, masked_indices_list, tokens_tensor, mask_tensor = \
                 model.get_batch_generation(sentences_b, logger=logger)
@@ -608,7 +614,10 @@ def main(args,
                 elif temp_model is not None:
                     filter_lp_merge.extend(filtered_log_probs_list)
 
+            samples_b_prev = samples_b_this
+
         label_index_list = []
+        obj_word_list = []
         for sample in samples_b:
             obj_label_id = model.get_id(sample["obj_label"])
 
@@ -631,6 +640,7 @@ def main(args,
                 )
 
             label_index_list.append(obj_label_id)
+            obj_word_list.append(sample['obj_label'])
 
         if dynamic.startswith('real_lm_topk') or \
                 dynamic.startswith('obj_lm_topk') or \
@@ -696,15 +706,18 @@ def main(args,
                 objs_score, objs_ind = filter_lp_merge.topk(bt_obj, dim=-1)
                 objs_ind = torch.sort(objs_ind, dim=-1)[0]  # the index must be ascending
             elif optimizer == 'precompute':  # use ground truth
-                objs_ind = torch.tensor([index_list.index(li[0]) for li in label_index_list]).view(-1, 1)
+                objs_ind = label_index_tensor.view(-1, 1)
                 bt_obj = 1
 
             # bach translation
             sub_lp_list = []
             for sentences_b, samples_b_this in zip(sentences_b_all, samples_b_all):  # iter over templates
                 for obj_i in range(bt_obj):  # iter over objs
-                    sentences_b_mask_sub = [[replace_list(s['sub_masked_sentences'][0][0], model.mask_token, used_vocab[obj_pred[obj_i].item()])]
-                                            for s, obj_pred in zip(samples_b_this, objs_ind)]
+                    sentences_b_mask_sub = []
+                    for s, obj_pred, obj_word in zip(samples_b_this, objs_ind, obj_word_list):
+                        replace_tok = used_vocab[obj_pred[obj_i].item()]
+                        assert replace_tok.strip() == obj_word.strip()
+                        sentences_b_mask_sub.append([replace_list(s['sub_masked_sentences'][0][0], model.mask_token, replace_tok)])
                     sub_mask = [s['sub_masked_sentences'][1] for s in samples_b_this]
                     # TODO: only masked lm can do this
                     lp, _, _, tokens_tensor, mask_tensor = \

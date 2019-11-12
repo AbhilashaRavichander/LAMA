@@ -206,7 +206,7 @@ def run_experiments(
         if temp_model is not None:
             if temp_model[1] == 'precompute':
                 features = run_evaluation(
-                    args, shuffle_data=True, model=model, refine_template=bool(refine_template),
+                    args, shuffle_data=False, model=model, refine_template=bool(refine_template),
                     get_objs=get_objs, dynamic=dynamic, use_prob=use_prob, bt_obj=bt_obj, temp_model=temp_model)
                 print('save features for {}'.format(relation['relation']))
                 torch.save(features, os.path.join(save, relation['relation'] + '.pt'))
