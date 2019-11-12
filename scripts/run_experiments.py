@@ -237,21 +237,27 @@ def run_experiments(
                     temp_model_, optimizer = temp_model
                     min_loss = 1e10
                     es = 0
-                    for e in range(100):
+                    for e in range(500):
                         # SHAPE: (num_sample, num_temp)
                         feature = torch.load(os.path.join(feature_dir, args.relation + '.pt'))
                         #weight = feature.mean(0)
                         #temp_model[0].set_weight(args.relation, weight)
                         optimizer.zero_grad()
                         loss = temp_model_(args.relation, feature)
+                        if os.path.exists(feature_dir + '__dev'):  # TODO: debug
+                            dev_feature = torch.load(os.path.join(feature_dir + '_dev', args.relation + '.pt'))
+                            dev_loss = temp_model_(args.relation, dev_feature)
+                        else:
+                            dev_loss = loss
                         loss.backward()
                         optimizer.step()
-                        if loss < min_loss:
-                            min_loss = loss
+                        if dev_loss - min_loss < -1e-3:
+                            min_loss = dev_loss
                             es = 0
                         else:
                             es += 1
                             if es >= 10:
+                                print('early stop')
                                 break
                 continue
 

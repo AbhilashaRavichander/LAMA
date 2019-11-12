@@ -426,10 +426,6 @@ def main(args,
                 sample["masked_sentences"] = parse_template(
                     template.strip(), sample["sub_label"].strip(), model.mask_token
                 )
-                if bt_obj:
-                    sample['sub_masked_sentences'] = parse_template(
-                        template.strip(), model.mask_token, sample['obj_label'].strip()
-                    )
                 if dynamic.startswith('bt_topk') or temp_model is not None:
                     sample['sub_masked_sentences'] = parse_template_tokenize(
                         template.strip(), sample["sub_label"].strip(), model, mask_part='sub'
