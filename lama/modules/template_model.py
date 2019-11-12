@@ -21,24 +21,33 @@ class TempModel(nn.Module):
                 features: torch.FloatTensor,  # SHAPE: (batch_size, num_temp, vocab_size)
                 target: torch.LongTensor=None  # SHAPE: (batch_size,)
                 ):
-        num_temp = features.size(1)
-        weight = getattr(self, relation)[:num_temp]
+        weight = getattr(self, relation)
+        num_temp = min(features.size(1), weight.size(0))
+        weight = weight[:num_temp]
+        features = features[:, :num_temp]
+
+        weight = weight.exp()
+        weight = weight / weight.sum()
+
         if self.enforce_prob:
-            weight = weight.exp()
-            weight = weight / weight.sum()
+            features = features.exp()
         if len(features.size()) == 3:
             # SHAPE: (batch_size, vocab_size)
-            features = (features.exp() * weight.view(1, -1, 1)).sum(1)
+            features = (features * weight.view(1, -1, 1)).sum(1)
             if target is not None:
                 #loss = nn.CrossEntropyLoss(reduction='mean')(features, target)
                 # SHAPE: (batch_size,)
                 loss = torch.gather(features, dim=1, index=target.view(-1, 1))
-                loss = -loss.log().mean()
+                if self.enforce_prob:
+                    loss = loss.log()
+                loss = -loss.mean()
                 return loss
         elif len(features.size()) == 2:
             # SHAPE: (batch_size,)
-            features = (features.exp() * weight.view(1, -1)).sum(1)
-            loss = -features.log().mean()
+            loss = (features * weight.view(1, -1)).sum(1)
+            if self.enforce_prob:
+                loss = loss.log()
+            loss = -loss.mean()
             return loss
         else:
             raise NotImplementedError

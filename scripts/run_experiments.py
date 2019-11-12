@@ -105,6 +105,8 @@ def run_experiments(
     save=None,
     load=None,
     feature_dir=None,
+    enforce_prob=True,
+    num_feat=1,
     input_param={
         "lm": "bert",
         "label": "bert_large",
@@ -138,14 +140,14 @@ def run_experiments(
         if temp_model.startswith('mixture'):
             method = temp_model.split('_')[1]
             if method == 'optimize':  # (extract feature) + optimize
-                temp_model = TempModel(rel2numtemp, enforce_prob=True, num_feat=2)
+                temp_model = TempModel(rel2numtemp, enforce_prob=enforce_prob, num_feat=num_feat)
                 temp_model.train()
                 optimizer = optim.Adam(temp_model.parameters(), lr=1e-1)
                 temp_model = (temp_model, optimizer)
             elif method == 'precompute':  # extract feature
                 temp_model = (None, 'precompute')
             elif method == 'predict':  # predict
-                temp_model = TempModel(rel2numtemp, enforce_prob=True, num_feat=2)  # TODO: number of feature
+                temp_model = TempModel(rel2numtemp, enforce_prob=enforce_prob, num_feat=num_feat)  # TODO: number of feature
                 if load is not None:
                     temp_model.load_state_dict(torch.load(load))
                 temp_model.eval()
@@ -235,17 +237,18 @@ def run_experiments(
                         print('Loss\t{}\t{}\t{}'.format(relation['relation'], loss, dev_acc))
                 else:
                     temp_model_, optimizer = temp_model
+                    temp_model_.cuda()
                     min_loss = 1e10
                     es = 0
                     for e in range(500):
                         # SHAPE: (num_sample, num_temp)
-                        feature = torch.load(os.path.join(feature_dir, args.relation + '.pt'))
+                        feature = torch.load(os.path.join(feature_dir, args.relation + '.pt')).cuda()
                         #weight = feature.mean(0)
                         #temp_model[0].set_weight(args.relation, weight)
                         optimizer.zero_grad()
                         loss = temp_model_(args.relation, feature)
                         if os.path.exists(feature_dir + '__dev'):  # TODO: debug
-                            dev_feature = torch.load(os.path.join(feature_dir + '_dev', args.relation + '.pt'))
+                            dev_feature = torch.load(os.path.join(feature_dir + '_dev', args.relation + '.pt')).cuda()
                             dev_loss = temp_model_(args.relation, dev_feature)
                         else:
                             dev_loss = loss
@@ -357,9 +360,11 @@ def get_relation_phrase_parameters(args):
     save = args.save
     load = args.load
     feature_dir = args.feature_dir
+    enforce_prob = args.enforce_prob
+    num_feat = args.num_feat
     return relations, data_path_pre, data_path_post, args.refine_template, \
            args.get_objs, args.batch_size, args.dynamic, args.use_prob, \
-           bt_obj, temp_model, save, load, feature_dir
+           bt_obj, temp_model, save, load, feature_dir, enforce_prob, num_feat
 
 
 def get_test_phrase_parameters(args):
@@ -385,8 +390,10 @@ def get_test_phrase_parameters(args):
     save = None
     load = None
     feature_dir = None
+    enforce_prob = True
+    num_feat = 1
     return relations, data_path_pre, data_path_post, refine_template, get_objs, \
-           batch_size, dynamic, use_prob, bt_obj, temp_model, save, load, feature_dir
+           batch_size, dynamic, use_prob, bt_obj, temp_model, save, load, feature_dir, enforce_prob, num_feat
 
 
 def get_ConceptNet_parameters(data_path_pre="data/"):
@@ -444,6 +451,8 @@ if __name__ == "__main__":
     parser.add_argument('--load', help='path to load temp model', default=None)
     parser.add_argument('--feature_dir', help='dir to features', default=None)
     parser.add_argument('--bt_obj', type=int, help='beam size of bach translation', default=None)
+    parser.add_argument('--enforce_prob', help='whether force the feature to be prob', action='store_true')
+    parser.add_argument('--num_feat', type=int, help='number of features', default=1)
     args = parser.parse_args()
     parameters = get_relation_phrase_parameters(args)
     #parameters = get_test_phrase_parameters(args)
