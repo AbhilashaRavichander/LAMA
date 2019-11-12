@@ -426,6 +426,10 @@ def main(args,
                 sample["masked_sentences"] = parse_template(
                     template.strip(), sample["sub_label"].strip(), model.mask_token
                 )
+                if bt_obj:
+                    sample['sub_masked_sentences'] = parse_template(
+                        template.strip(), model.mask_token, sample['obj_label'].strip()
+                    )
                 if dynamic.startswith('bt_topk') or temp_model is not None:
                     sample['sub_masked_sentences'] = parse_template_tokenize(
                         template.strip(), sample["sub_label"].strip(), model, mask_part='sub'
@@ -488,6 +492,7 @@ def main(args,
 
     loss_list = []
     features_list = []
+    bt_features_list = []
 
     for i in tqdm(range(len(samples_batches_li))):
 
@@ -657,9 +662,10 @@ def main(args,
                 # SHAPE: (batch_size * num_temp)
                 features = torch.gather(lp.contiguous().view(-1, lp.size(-1)), dim=1,
                                         index=label_index_tensor.repeat(lp.size(1)).view(-1, 1))
-                features = features.exp().view(-1, lp.size(1))
+                features = features.view(-1, lp.size(1))
                 features_list.append(features)
-                continue
+                if bt_obj is None:
+                    continue
             elif optimizer is not None:  # train on the fly
                 optimizer.zero_grad()
                 loss = temp_model_(args.relation, filter_lp_merge.detach(), target=label_index_tensor.detach())
@@ -688,9 +694,14 @@ def main(args,
         if bt_obj:  # choose top bt_obj objects and bach-translate subject
             # get the top bt_obj objects with highest probability
             used_vocab = vocab_subset if vocab_subset is not None else model.vocab
-            # SHAPE: (batch_size, bt_obj)
-            objs_score, objs_ind = filter_lp_merge.topk(bt_obj, dim=-1)
-            objs_ind = torch.sort(objs_ind, dim=-1)[0]  # the index must be ascending
+            temp_model_, optimizer = temp_model
+            if optimizer is None:  # use beam search
+                # SHAPE: (batch_size, bt_obj)
+                objs_score, objs_ind = filter_lp_merge.topk(bt_obj, dim=-1)
+                objs_ind = torch.sort(objs_ind, dim=-1)[0]  # the index must be ascending
+            elif optimizer == 'precompute':  # use ground truth
+                objs_ind = torch.tensor([index_list.index(li[0]) for li in label_index_list]).view(-1, 1)
+                bt_obj = 1
 
             # bach translation
             sub_lp_list = []
@@ -710,10 +721,15 @@ def main(args,
                     sub_lp_avg = sub_lp.sum(-1) / mask_tensor.sum(-1)  # normalized prob
                     sub_lp_list.append(sub_lp_avg)
 
-            # select obj prob
             # SHAPE: (batch_size, num_temp, top_obj_num)
             num_temp = len(sentences_b_all)
             sub_lp_list = torch.cat(sub_lp_list, 0).view(num_temp, bt_obj, -1).permute(2, 0, 1)
+
+            if optimizer == 'precompute':
+                bt_features_list.append(sub_lp_list.squeeze(-1))
+                continue
+
+            # select obj prob
             expand_mask = torch.zeros_like(filter_lp_unmerge)
             expand_mask.scatter_(-1, objs_ind.unsqueeze(1).repeat(1, num_temp, 1), 1)
             # SHAPE: (batch_size, num_temp, top_obj_num)
@@ -831,7 +847,11 @@ def main(args,
 
     if temp_model is not None:
         if temp_model[1] == 'precompute':
-            return torch.cat(features_list, 0)
+            features = torch.cat(features_list, 0)
+            if bt_obj:
+                bt_features = torch.cat(bt_features_list, 0)
+                features = torch.cat([features, bt_features], 1)
+            return features
         if temp_model[1] is not None:
             return np.mean(loss_list)
 

@@ -203,11 +203,9 @@ def run_experiments(
 
         if temp_model is not None:
             if temp_model[1] == 'precompute':
-                features = run_evaluation(args, shuffle_data=True, model=model,
-                                          refine_template=bool(refine_template),
-                                          get_objs=get_objs, dynamic=dynamic,
-                                          use_prob=use_prob, bt_obj=bt_obj,
-                                          temp_model=temp_model)
+                features = run_evaluation(
+                    args, shuffle_data=True, model=model, refine_template=bool(refine_template),
+                    get_objs=get_objs, dynamic=dynamic, use_prob=use_prob, bt_obj=bt_obj, temp_model=temp_model)
                 print('save features for {}'.format(relation['relation']))
                 torch.save(features, os.path.join(save, relation['relation'] + '.pt'))
                 continue
@@ -439,6 +437,7 @@ if __name__ == "__main__":
     parser.add_argument('--save', help='path to save temp model', default=None)
     parser.add_argument('--load', help='path to load temp model', default=None)
     parser.add_argument('--feature_dir', help='dir to features', default=None)
+    parser.add_argument('--bt_obj', type=int, help='beam size of bach translation', default=None)
     args = parser.parse_args()
     parameters = get_relation_phrase_parameters(args)
     #parameters = get_test_phrase_parameters(args)

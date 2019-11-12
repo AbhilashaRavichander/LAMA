@@ -28,16 +28,16 @@ class TempModel(nn.Module):
             weight = weight / weight.sum()
         if len(features.size()) == 3:
             # SHAPE: (batch_size, vocab_size)
-            features = (features * weight.view(1, -1, 1)).sum(1).exp()
+            features = (features.exp() * weight.view(1, -1, 1)).sum(1)
             if target is not None:
                 #loss = nn.CrossEntropyLoss(reduction='mean')(features, target)
                 # SHAPE: (batch_size,)
                 loss = torch.gather(features, dim=1, index=target.view(-1, 1))
-                loss = -loss.mean()
+                loss = -loss.log().mean()
                 return loss
         elif len(features.size()) == 2:
             # SHAPE: (batch_size,)
-            features = (features * weight.view(1, -1)).sum(1)
+            features = (features.exp() * weight.view(1, -1)).sum(1)
             loss = -features.log().mean()
             return loss
         else:
