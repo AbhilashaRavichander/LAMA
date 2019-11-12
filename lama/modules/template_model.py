@@ -4,12 +4,13 @@ import torch.nn as nn
 
 
 class TempModel(nn.Module):
-    def __init__(self, rel2numtemp: Dict[str, int], enforce_prob: bool=True):
+    def __init__(self, rel2numtemp: Dict[str, int], enforce_prob: bool=True, num_feat: int=1):
         super(TempModel, self).__init__()
         self.rel2numtemp = rel2numtemp
         self.enforce_prob = enforce_prob
+        self.num_feat = num_feat
         for rel, numtemp in rel2numtemp.items():
-            setattr(self, rel, nn.Parameter(torch.zeros(numtemp)))
+            setattr(self, rel, nn.Parameter(torch.zeros(numtemp * num_feat)))
 
     def set_weight(self, relation: str, new_weight: torch.Tensor):
         weight = getattr(self, relation)
@@ -20,8 +21,8 @@ class TempModel(nn.Module):
                 features: torch.FloatTensor,  # SHAPE: (batch_size, num_temp, vocab_size)
                 target: torch.LongTensor=None  # SHAPE: (batch_size,)
                 ):
-        # SHAPE: (num_temp)
-        weight = getattr(self, relation)
+        num_temp = features.size(1)
+        weight = getattr(self, relation)[:num_temp]
         if self.enforce_prob:
             weight = weight.exp()
             weight = weight / weight.sum()

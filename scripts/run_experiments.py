@@ -100,6 +100,7 @@ def run_experiments(
     batch_size,
     dynamic=None,
     use_prob=False,
+    bt_obj=None,
     temp_model=None,
     save=None,
     load=None,
@@ -137,17 +138,16 @@ def run_experiments(
         if temp_model.startswith('mixture'):
             method = temp_model.split('_')[1]
             if method == 'optimize':  # (extract feature) + optimize
-                temp_model = TempModel(rel2numtemp, enforce_prob=True)
+                temp_model = TempModel(rel2numtemp, enforce_prob=True, num_feat=2)
                 temp_model.train()
                 optimizer = optim.Adam(temp_model.parameters(), lr=1e-1)
                 temp_model = (temp_model, optimizer)
             elif method == 'precompute':  # extract feature
                 temp_model = (None, 'precompute')
             elif method == 'predict':  # predict
-                print('load temp model from {}'.format(load))
-                temp_model = TempModel(rel2numtemp, enforce_prob=True)
-                temp_model.eval()
-                temp_model.load_state_dict(torch.load(load))
+                temp_model = TempModel(rel2numtemp, enforce_prob=True, num_feat=2)  # TODO: number of feature
+                if load is not None:
+                    temp_model.load_state_dict(torch.load(load))
                 temp_model.eval()
                 temp_model = (temp_model, None)
             else:
@@ -206,7 +206,8 @@ def run_experiments(
                 features = run_evaluation(args, shuffle_data=True, model=model,
                                           refine_template=bool(refine_template),
                                           get_objs=get_objs, dynamic=dynamic,
-                                          use_prob=use_prob, temp_model=temp_model)
+                                          use_prob=use_prob, bt_obj=bt_obj,
+                                          temp_model=temp_model)
                 print('save features for {}'.format(relation['relation']))
                 torch.save(features, os.path.join(save, relation['relation'] + '.pt'))
                 continue
@@ -218,11 +219,13 @@ def run_experiments(
                         loss = run_evaluation(args, shuffle_data=True, model=model,
                                               refine_template=bool(refine_template),
                                               get_objs=get_objs, dynamic=dynamic,
-                                              use_prob=use_prob, temp_model=temp_model)
+                                              use_prob=use_prob, bt_obj=bt_obj,
+                                              temp_model=temp_model)
                         dev_acc = run_evaluation(args, shuffle_data=False, model=model,
                                                   refine_template=bool(refine_template),
                                                   get_objs=get_objs, dynamic=dynamic,
-                                                  use_prob=use_prob, temp_model=(temp_model[0], None))
+                                                  use_prob=use_prob, bt_obj=bt_obj,
+                                                 temp_model=(temp_model[0], None))
                         if dev_acc > max_dev_acc:
                             max_dev_acc = dev_acc
                             es = 0
@@ -257,7 +260,8 @@ def run_experiments(
         Precision1 = run_evaluation(args, shuffle_data=False, model=model,
                                     refine_template=bool(refine_template),
                                     get_objs=get_objs, dynamic=dynamic,
-                                    use_prob=use_prob, temp_model=temp_model)
+                                    use_prob=use_prob, bt_obj=bt_obj,
+                                    temp_model=temp_model)
 
         if get_objs:
             return
@@ -344,13 +348,14 @@ def get_relation_phrase_parameters(args):
         relations = [relations[0]]
     data_path_pre = args.prefix
     data_path_post = args.suffix
+    bt_obj = args.bt_obj
     temp_model = args.temp_model
     save = args.save
     load = args.load
     feature_dir = args.feature_dir
     return relations, data_path_pre, data_path_post, args.refine_template, \
-           args.get_objs, args.batch_size, args.dynamic, args.use_prob, temp_model, \
-           save, load, feature_dir
+           args.get_objs, args.batch_size, args.dynamic, args.use_prob, \
+           bt_obj, temp_model, save, load, feature_dir
 
 
 def get_test_phrase_parameters(args):
@@ -364,19 +369,20 @@ def get_test_phrase_parameters(args):
     #relations = [{"relation": "P19", "template": "[X] is born in [Y] ."}]
     relations = [{"relation": "P19", "template": ["[X] is born in [Y] .", "[X] died at [Y] ."]},
                  {"relation": "P108", "template": ["[X] works for [Y] .", "[Y] commentator [X] ."]}]
-    data_path_pre = "data/TREx_train_train/"
+    data_path_pre = "data/TREx"
     data_path_post = ".jsonl"
     refine_template = None  #'test.out'
     get_objs = False
     batch_size = 32
     dynamic = 'none'
     use_prob = False
-    temp_model = 'mixture'
-    save = 'test.pt'
+    bt_obj = 5
+    temp_model = 'mixture_predict'
+    save = None
     load = None
     feature_dir = None
     return relations, data_path_pre, data_path_post, refine_template, get_objs, \
-           batch_size, dynamic, use_prob, temp_model, save, load, feature_dir
+           batch_size, dynamic, use_prob, bt_obj, temp_model, save, load, feature_dir
 
 
 def get_ConceptNet_parameters(data_path_pre="data/"):

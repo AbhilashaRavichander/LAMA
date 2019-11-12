@@ -310,6 +310,7 @@ def main(args,
          get_objs=False,
          dynamic='none',
          use_prob=False,
+         bt_obj=None,
          temp_model=None):
 
     if len(args.models_names) > 1:
@@ -425,7 +426,7 @@ def main(args,
                 sample["masked_sentences"] = parse_template(
                     template.strip(), sample["sub_label"].strip(), model.mask_token
                 )
-                if dynamic.startswith('bt_topk'):
+                if dynamic.startswith('bt_topk') or temp_model is not None:
                     sample['sub_masked_sentences'] = parse_template_tokenize(
                         template.strip(), sample["sub_label"].strip(), model, mask_part='sub'
                     )
@@ -493,7 +494,7 @@ def main(args,
         samples_b_all = samples_batches_li[i]
         sentences_b_all = sentences_batches_li[i]
 
-        filtered_log_probs_list_merge = None
+        filter_lp_merge = None
         samples_b = samples_b_all[-1]
         max_score = float('-inf')
         consist_score_li = []
@@ -554,12 +555,7 @@ def main(args,
                 get_gap = lambda top2: (top2[0] - top2[1]).item()
                 consist_score = torch.tensor([get_gap(torch.topk(flp, k=2)[0]) for flp in filtered_log_probs_list])
             elif dynamic.startswith('bt_topk'):
-                # use the highest obj to "back translate" sub
-                def replace_list(li, from_ele, to_ele):
-                    li = deepcopy(li)
-                    li[li.index(from_ele)] = to_ele
-                    return li
-
+                # use the obj_topk highest obj to "back translate" sub
                 consist_score_obj_topk = []
                 used_vocab = vocab_subset if vocab_subset is not None else model.vocab
                 for obj_i in range(obj_topk):
@@ -585,8 +581,8 @@ def main(args,
                 consist_score = (consist_score_obj_topk * consist_score_weight).sum(-1) / (consist_score_weight.sum(-1) + 1e-10)
 
             # add to overall probability
-            if filtered_log_probs_list_merge is None:
-                filtered_log_probs_list_merge = filtered_log_probs_list
+            if filter_lp_merge is None:
+                filter_lp_merge = filtered_log_probs_list
                 if dynamic == 'lm' or dynamic == 'real_lm':
                     max_score = consist_score
                 elif dynamic.startswith('real_lm_topk') or \
@@ -596,22 +592,20 @@ def main(args,
                     consist_score_li.append(consist_score)
             else:
                 if dynamic == 'none' and temp_model is None:
-                    filtered_log_probs_list_merge = \
-                        [a + b for a, b in zip(filtered_log_probs_list_merge, filtered_log_probs_list)]
+                    filter_lp_merge = [a + b for a, b in zip(filter_lp_merge, filtered_log_probs_list)]
                 elif dynamic == 'lm' or dynamic == 'real_lm':
-                    #print((max_score < consist_score).sum())
-                    filtered_log_probs_list_merge = \
+                    filter_lp_merge = \
                         [a if c >= d else b for a, b, c, d in
-                         zip(filtered_log_probs_list_merge, filtered_log_probs_list, max_score, consist_score)]
+                         zip(filter_lp_merge, filtered_log_probs_list, max_score, consist_score)]
                     max_score = torch.max(max_score, consist_score)
                 elif dynamic.startswith('real_lm_topk') or \
                         dynamic.startswith('obj_lm_topk') or \
                         dynamic.startswith('obj_lmgap_topk') or \
                         dynamic.startswith('bt_topk'):
-                    filtered_log_probs_list_merge.extend(filtered_log_probs_list)
+                    filter_lp_merge.extend(filtered_log_probs_list)
                     consist_score_li.append(consist_score)
                 elif temp_model is not None:
-                    filtered_log_probs_list_merge.extend(filtered_log_probs_list)
+                    filter_lp_merge.extend(filtered_log_probs_list)
 
         label_index_list = []
         for sample in samples_b:
@@ -643,24 +637,23 @@ def main(args,
                 dynamic.startswith('bt_topk') or \
                 temp_model is not None:  # analyze prob
             # SHAPE: (batch_size, num_temp, filter_vocab_size)
-            filtered_log_probs_list_merge = torch.stack(filtered_log_probs_list_merge, 0).view(
-                len(sentences_b_all), len(filtered_log_probs_list_merge) // len(sentences_b_all), -1).permute(1, 0, 2)
-
+            filter_lp_merge = torch.stack(filter_lp_merge, 0).view(
+                len(sentences_b_all), len(filter_lp_merge) // len(sentences_b_all), -1).permute(1, 0, 2)
             # SHAPE: (batch_size)
             label_index_tensor = torch.tensor([index_list.index(li[0]) for li in label_index_list])
             c_inc = np.array(metrics.analyze_prob(
-                filtered_log_probs_list_merge, label_index_tensor, output=False, method='sample'))
-            #print(filtered_log_probs_list_merge[0])
-            #input()
+                filter_lp_merge, label_index_tensor, output=False, method='sample'))
             c_inc_stat += c_inc
+
+        # SHAPE: (batch_size, num_temp, filter_vocab_size)
+        filter_lp_unmerge = filter_lp_merge
 
         if temp_model is not None:  # optimize template weights
             temp_model_, optimizer = temp_model
             if optimizer is None:  # predict
-                filtered_log_probs_list_merge = temp_model_(
-                    args.relation, filtered_log_probs_list_merge.detach(), target=None)
+                filter_lp_merge = temp_model_(args.relation, filter_lp_merge.detach(), target=None)
             elif optimizer == 'precompute':  # pre-compute and save featuers
-                lp = filtered_log_probs_list_merge
+                lp = filter_lp_merge
                 # SHAPE: (batch_size * num_temp)
                 features = torch.gather(lp.contiguous().view(-1, lp.size(-1)), dim=1,
                                         index=label_index_tensor.repeat(lp.size(1)).view(-1, 1))
@@ -669,8 +662,7 @@ def main(args,
                 continue
             elif optimizer is not None:  # train on the fly
                 optimizer.zero_grad()
-                loss = temp_model_(
-                    args.relation, filtered_log_probs_list_merge.detach(), target=label_index_tensor.detach())
+                loss = temp_model_(args.relation, filter_lp_merge.detach(), target=label_index_tensor.detach())
                 loss.backward()
                 optimizer.step()
                 loss_list.append(loss.item())
@@ -690,8 +682,52 @@ def main(args,
             # SHAPE: (batch_size, num_temp, 1)
             consist_mask = (consist_score_li >= consist_score).float().unsqueeze(-1)
             # avg over top k
-            filtered_log_probs_list_merge = filtered_log_probs_list_merge * consist_mask
-            filtered_log_probs_list_merge = filtered_log_probs_list_merge.sum(1) / consist_mask.sum(1)
+            filter_lp_merge = filter_lp_merge * consist_mask
+            filter_lp_merge = filter_lp_merge.sum(1) / consist_mask.sum(1)
+
+        if bt_obj:  # choose top bt_obj objects and bach-translate subject
+            # get the top bt_obj objects with highest probability
+            used_vocab = vocab_subset if vocab_subset is not None else model.vocab
+            # SHAPE: (batch_size, bt_obj)
+            objs_score, objs_ind = filter_lp_merge.topk(bt_obj, dim=-1)
+            objs_ind = torch.sort(objs_ind, dim=-1)[0]  # the index must be ascending
+
+            # bach translation
+            sub_lp_list = []
+            for sentences_b, samples_b_this in zip(sentences_b_all, samples_b_all):  # iter over templates
+                for obj_i in range(bt_obj):  # iter over objs
+                    sentences_b_mask_sub = [[replace_list(s['sub_masked_sentences'][0][0], model.mask_token, used_vocab[obj_pred[obj_i].item()])]
+                                            for s, obj_pred in zip(samples_b_this, objs_ind)]
+                    sub_mask = [s['sub_masked_sentences'][1] for s in samples_b_this]
+                    # TODO: only masked lm can do this
+                    lp, _, _, tokens_tensor, mask_tensor = \
+                        model.get_batch_generation(sentences_b_mask_sub, logger=logger, relation_mask=sub_mask)
+                    # use avg prob of the sub as score
+                    mask_tensor = mask_tensor.float()
+                    lp_flat = lp.view(-1, lp.size(-1))
+                    sub_lp = torch.gather(lp_flat, dim=1, index=tokens_tensor.view(-1, 1)).view(*lp.size()[:2])
+                    sub_lp = sub_lp * mask_tensor
+                    sub_lp_avg = sub_lp.sum(-1) / mask_tensor.sum(-1)  # normalized prob
+                    sub_lp_list.append(sub_lp_avg)
+
+            # select obj prob
+            # SHAPE: (batch_size, num_temp, top_obj_num)
+            num_temp = len(sentences_b_all)
+            sub_lp_list = torch.cat(sub_lp_list, 0).view(num_temp, bt_obj, -1).permute(2, 0, 1)
+            expand_mask = torch.zeros_like(filter_lp_unmerge)
+            expand_mask.scatter_(-1, objs_ind.unsqueeze(1).repeat(1, num_temp, 1), 1)
+            # SHAPE: (batch_size, num_temp, top_obj_num)
+            obj_lp_list = torch.masked_select(filter_lp_unmerge, expand_mask.eq(1)).view(-1, num_temp, bt_obj)
+
+            # run temp model
+            # SHAPE: (batch_size, vocab_size)
+            filter_lp_merge_expand = torch.zeros_like(filter_lp_merge)
+            # SHAPE: (batch_size, top_obj_num)
+            filter_lp_merge = temp_model_(args.relation, torch.cat([obj_lp_list, sub_lp_list], 1), target=None)
+
+            # expand results to vocab_size
+            filter_lp_merge_expand.scatter_(-1, objs_ind, filter_lp_merge)
+            filter_lp_merge = filter_lp_merge_expand + expand_mask[:, 0, :].log()  # mask out other objs
 
         arguments = [
             {
@@ -707,7 +743,7 @@ def main(args,
             }
             for original_log_probs, filtered_log_probs, token_ids, masked_indices, label_index, sample in zip(
                 original_log_probs_list,
-                filtered_log_probs_list_merge,
+                filter_lp_merge,
                 token_ids_list,
                 masked_indices_list,
                 label_index_list,
@@ -849,6 +885,12 @@ def main(args,
         '\t'.join(map(str, (c_inc_stat[:, :-1] / (c_inc_stat[:, -1:] + 1e-5)).reshape(-1)))))
 
     return Precision1
+
+
+def replace_list(li, from_ele, to_ele):
+    li = deepcopy(li)
+    li[li.index(from_ele)] = to_ele
+    return li
 
 
 if __name__ == "__main__":
