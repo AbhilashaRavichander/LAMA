@@ -10,6 +10,9 @@ from tqdm import tqdm
 import urllib.request
 import urllib.parse
 import time
+import torch
+from batch_eval_KB_completion import load_file
+from subprocess import Popen, PIPE
 
 
 def avg_by_label(scores: List, labels: Union[List, None]):
@@ -60,6 +63,25 @@ def out_ana(args):
     print('first {:.3f}, best {:.3f}, allbest {:.3f}, ensemble {:.3f}, numtemp {}'.format(
         first, best_score, max(first, best_score), ensemble_score, len(templates)))
     print('obj entropy: {}'.format(obj_entropy))
+
+
+def out_ana_optimize(args):
+    relations = []
+    scores = []
+    relation = None
+    with open(args.inp, 'r') as fin:
+        for l in fin:
+            if l.strip().startswith("'relation':"):
+                relation = l.split(':', 1)[1].strip().rstrip(',').strip("'")
+            elif l.strip().startswith('global Precision at 1:'):
+                score = float(l.split(':', 1)[1].strip())
+                relations.append(relation)
+                scores.append(score)
+    rel_scores = dict(zip(relations, scores))
+    rel_scores = [(rel.split('.', 1)[0], rel_scores[rel.split('.', 1)[0]])
+                  for rel in listdir_shell('data/TREx') if rel.split('.', 1)[0] in rel_scores]
+    print('\n'.join(map(lambda x: '{}\t{}'.format(*x), rel_scores)))
+    print('mean: {}'.format(np.mean(scores)))
 
 
 def wikidata_to_trex(args):
@@ -326,11 +348,41 @@ def split_dev(args):
                     fout.write(l + '\n')
 
 
+def listdir_shell(path, *lsargs):
+    p = Popen(('ls', path) + lsargs, shell=False, stdout=PIPE, close_fds=True)
+    return [path.decode('utf-8').rstrip('\n') for path in p.stdout.readlines()]
+
+
+def weight_ana(args, top=1):
+    weight_file, relation_file = args.inp.split(':')
+    relations = load_file(relation_file)
+    rel2temp = dict((rel['relation'], rel['template']) for rel in relations)
+    weights = torch.load(weight_file)
+    peak_count, all_count = 0, 0
+    for rel in listdir_shell('data/TREx'):
+        rel = rel.split('.', 1)[0]
+        weight_dim = weights[rel].size(0)
+        weight = weights[rel].exp() / weights[rel].exp().sum()
+        max_ind = weight.argmax().item()
+        max_weight = weight[max_ind].item()
+        more_prob = 0
+        if weight_dim > len(rel2temp[rel]):
+            more_prob = weight[len(rel2temp[rel]):].sum()
+        all_count += 1
+        if max_weight >= 0.9:
+            peak_count += 1
+        print('relation {} max ind {} max prob {} more prob {} template {}'.format(
+            rel, max_ind, max_weight, more_prob, rel2temp[rel][max_ind % len(rel2temp[rel])]))
+        if top > 1:
+            print([rel2temp[rel][i % len(rel2temp[rel])] for i in torch.argsort(-weight)[:top]])
+    print('peak {} out of {}, weight dim {}'.format(peak_count, all_count, weight_dim))
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='analyze output log')
     parser.add_argument('--task', type=str, help='task', required=True, 
         choices=['out', 'wikidata', 'sort', 'major_class', 'get_train_data',
-                 'get_ppdb', 'case', 'merge_all_rel', 'split_dev'])
+                 'get_ppdb', 'case', 'merge_all_rel', 'split_dev', 'weight_ana', 'out_ana_opti'])
     parser.add_argument('--inp', type=str, help='input file')
     parser.add_argument('--obj_file', type=str, help='obj file', default=None)
     parser.add_argument('--out', type=str, help='output file')
@@ -354,3 +406,7 @@ if __name__ == '__main__':
         merge_all_rel(args, top=30)
     elif args.task == 'split_dev':
         split_dev(args)
+    elif args.task == 'weight_ana':
+        weight_ana(args, top=1)
+    elif args.task == 'out_ana_opti':
+        out_ana_optimize(args)

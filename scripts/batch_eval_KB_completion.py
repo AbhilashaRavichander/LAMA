@@ -716,7 +716,8 @@ def main(args,
                     sentences_b_mask_sub = []
                     for s, obj_pred, obj_word in zip(samples_b_this, objs_ind, obj_word_list):
                         replace_tok = used_vocab[obj_pred[obj_i].item()]
-                        assert replace_tok.strip() == obj_word.strip()
+                        if optimizer == 'precompute':
+                            assert replace_tok.strip() == obj_word.strip()
                         sentences_b_mask_sub.append([replace_list(s['sub_masked_sentences'][0][0], model.mask_token, replace_tok)])
                     sub_mask = [s['sub_masked_sentences'][1] for s in samples_b_this]
                     # TODO: only masked lm can do this

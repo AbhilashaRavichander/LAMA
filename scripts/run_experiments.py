@@ -243,6 +243,8 @@ def run_experiments(
                     for e in range(500):
                         # SHAPE: (num_sample, num_temp)
                         feature = torch.load(os.path.join(feature_dir, args.relation + '.pt')).cuda()
+                        #dev_feature = torch.load(os.path.join(feature_dir + '_dev', args.relation + '.pt')).cuda()
+                        #feature = torch.cat([feature, dev_feature], 0)
                         #weight = feature.mean(0)
                         #temp_model[0].set_weight(args.relation, weight)
                         optimizer.zero_grad()
