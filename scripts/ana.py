@@ -1,4 +1,4 @@
-from typing import List, Dict, Union, Any
+from typing import List, Dict, Union, Any, Tuple
 import argparse
 import numpy as np
 import json
@@ -374,18 +374,68 @@ def weight_ana(args, top=1):
         print('relation {} max ind {} max prob {} more prob {} template {}'.format(
             rel, max_ind, max_weight, more_prob, rel2temp[rel][max_ind % len(rel2temp[rel])]))
         if top > 1:
-            print([rel2temp[rel][i % len(rel2temp[rel])] for i in torch.argsort(-weight)[:top]])
+            rank = torch.argsort(-weight)[:top]
+            print([(rel2temp[rel][i % len(rel2temp[rel])], '{:.3f}'.format(weight[i].item())) for i in rank])
     print('peak {} out of {}, weight dim {}'.format(peak_count, all_count, weight_dim))
+
+
+def parse_fairseq_file(filename):
+    results: List[Tuple[str, float]] = []
+    with open(filename, 'r') as fin:
+        for l in fin:
+            if l.startswith('H-'):
+                _, score, sent = l.strip().split('\t')
+                results.append((sent, float(score)))
+    return results
+
+
+def bt_filter(args):
+    pid_file, raw_tempfile = args.temp_file.split(':')
+    relations = list(map(lambda x: x.strip(), open(pid_file, 'r').read().strip().split('\n')))
+    raw_temps = list(map(lambda x: x.strip(), open(raw_tempfile, 'r').read().strip().split('\n')))
+    num_rel = len(relations)
+    rel2temps = defaultdict(lambda: [])
+    forward_file, backward_file = args.inp.split(':')
+    forward_result = parse_fairseq_file(forward_file)
+    backward_result = parse_fairseq_file(backward_file)
+    assert len(forward_result) == args.beam * num_rel
+    assert len(backward_result) == args.beam * args.beam * num_rel
+    fs = np.array([r[1] for r in forward_result]).reshape((num_rel, args.beam, 1))
+    bs = np.array([r[1] for r in backward_result]).reshape((num_rel, args.beam, args.beam))
+    final_scores = (bs + fs).reshape((num_rel, -1))  # add two avg log prob
+    new_temps = np.array([r[0] for r in backward_result]).reshape((num_rel, args.beam * args.beam))
+    for i in range(num_rel):
+        rel = relations[i]
+        rank = np.argsort(-final_scores[i])
+        seen = set()
+        for r in rank:
+            temp = new_temps[i][r]
+            score = final_scores[i][r]
+            if temp not in seen:
+                rel2temps[rel].append((temp, score))
+                seen.add(temp)
+    for i in range(num_rel):
+        rel = relations[i]
+        raw_temp = raw_temps[i]
+        temps = rel2temps[rel]
+        with open(os.path.join(args.out, rel + '.jsonl'), 'w') as fout:
+            fout.write(json.dumps({'relation': rel, 'template': raw_temp}) + '\n')
+            for temp in temps:
+                fout.write(json.dumps({'relation': rel, 'template': temp[0], 'bt_log_prob': temp[1]}) + '\n')
+            print('{} has {} temps'.format(rel, len(temps)))
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='analyze output log')
     parser.add_argument('--task', type=str, help='task', required=True, 
         choices=['out', 'wikidata', 'sort', 'major_class', 'get_train_data',
-                 'get_ppdb', 'case', 'merge_all_rel', 'split_dev', 'weight_ana', 'out_ana_opti'])
+                 'get_ppdb', 'case', 'merge_all_rel', 'split_dev', 'weight_ana',
+                 'out_ana_opti', 'bt_filter'])
     parser.add_argument('--inp', type=str, help='input file')
     parser.add_argument('--obj_file', type=str, help='obj file', default=None)
     parser.add_argument('--out', type=str, help='output file')
+    parser.add_argument('--temp_file', type=str, help='pid and raw temp file', default=None)
+    parser.add_argument('--beam', type=int, help='beam size', default=None)
     args = parser.parse_args()
 
     if args.task == 'out':
@@ -407,6 +457,8 @@ if __name__ == '__main__':
     elif args.task == 'split_dev':
         split_dev(args)
     elif args.task == 'weight_ana':
-        weight_ana(args, top=1)
+        weight_ana(args, top=3)
     elif args.task == 'out_ana_opti':
         out_ana_optimize(args)
+    elif args.task == 'bt_filter':
+        bt_filter(args)

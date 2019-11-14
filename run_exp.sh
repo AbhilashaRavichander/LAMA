@@ -43,7 +43,6 @@ optimize_temp_score() {
         --temp_model mixture \
         --save ${3} \
         --batch_size 32 > ${4} 2>&1
-   done
 }
 # extract features
 #python scripts/run_experiments.py --rel_file data/TREx_mine_allpids/merge_top30.jsonl --prefix data/TREx_train_train --suffix .jsonl --temp_model mixture_precompute --batch_size 32 --save output/features --num_feat 2 --bt_obj 1
