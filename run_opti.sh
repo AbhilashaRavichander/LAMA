@@ -91,12 +91,7 @@ done
 # predict
 for feat_type in feature_train feature_test
 do
-    head_tail_dir=""
-    if [ $feat_type == feature_train ]; then
-        head_tail_dir=data/TREx_train_train
-    elif [ $feat_type == feature_test ]; then
-        head_tail_dir=data/TREx
-    fi
+    head_tail_dir=data/TREx
     CUDA_VISIBLE_DEVICES=$cuda1 predict ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight/feat1_log.pt 1 &
     CUDA_VISIBLE_DEVICES=$cuda2 predict ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight/feat1_prob.pt 1 prob &
     CUDA_VISIBLE_DEVICES=$cuda1 predict ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight/feat2_log.pt 2 &
