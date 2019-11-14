@@ -43,10 +43,11 @@ def out_ana(args):
         obj_entropy = scipy.stats.entropy(counts)
     with open(args.inp, 'r') as fin:
         for l in fin:
+            l = l.strip()
             if l.startswith('P1all '):
                 stat.append(list(map(float, l.strip().split(' ')[1].split('\t'))))
-            elif l.startswith("{'dataset_filename':"):
-                templates.append(eval(l.strip())['template'])
+            elif l.startswith('{') and l.endswith('}'):
+                templates.append(eval(l)['template'])
     stat = np.array(stat)
     first = avg_by_label(stat[0], objs)  # the first template is manually designed
     ensemble_score = avg_by_label(np.max(stat, 0), objs)  # ensemble all the templates
@@ -71,9 +72,12 @@ def out_ana_optimize(args):
     relation = None
     with open(args.inp, 'r') as fin:
         for l in fin:
-            if l.strip().startswith("'relation':"):
-                relation = l.split(':', 1)[1].strip().rstrip(',').strip("'")
-            elif l.strip().startswith('global Precision at 1:'):
+            l = l.strip()
+            if l.startswith('{') and l.endswith('}'):
+                relation = eval(l)['relation']
+            #if l.strip().startswith("'relation':"):
+            #    relation = l.split(':', 1)[1].strip().rstrip(',').strip("'")
+            elif l.startswith('global Precision at 1:'):
                 score = float(l.split(':', 1)[1].strip())
                 relations.append(relation)
                 scores.append(score)
@@ -127,8 +131,9 @@ def rank_templates(args):
     templates, scores = [], []
     with open(args.inp, 'r') as fin:
         for l in fin:
-            if l.startswith("{'dataset_filename':"):
-                temp = eval(l.strip())['template']
+            l = l.strip()
+            if l.startswith('{') and l.endswith('}'):
+                temp = eval(l)['template']
                 if type(temp) is list:
                     if len(temp) != 1:
                         raise Exception('more than one temp')
@@ -292,10 +297,11 @@ def case_ana(args):
     templates = []
     with open(args.inp, 'r') as fin:
         for l in fin:
+            l = l.strip()
             if l.startswith('P1all '):
                 stat.append(list(map(float, l.strip().split(' ')[1].split('\t'))))
-            elif l.startswith("{'dataset_filename':"):
-                templates.append(eval(l.strip())['template'])
+            elif l.startswith('{') and l.endswith('}'):
+                templates.append(eval(l)['template'])
     stat = np.array(stat)
     templates = np.array(templates)
     
