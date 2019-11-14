@@ -411,6 +411,8 @@ def bt_filter(args):
         for r in rank:
             temp = new_temps[i][r]
             score = final_scores[i][r]
+            if temp.find('[X]') == -1 or temp.find('[Y]') == -1:
+                continue
             if temp not in seen:
                 rel2temps[rel].append((temp, score))
                 seen.add(temp)

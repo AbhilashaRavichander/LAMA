@@ -49,7 +49,7 @@ optimize_temp_score() {
 # optimize
 #python scripts/run_experiments.py --rel_file data/TREx_mine_allpids/merge_top30.jsonl --prefix data/TREx_train_train --suffix .jsonl --temp_model mixture_optimize --batch_size 32 --feature_dir output/features --save output/features_train/feat2_prob.pt --num_feat 2 --enforce_prob
 # predict
-#python scripts/run_experiments.py --rel_file data/TREx_mine_allpids/merge_top30.jsonl --prefix data/TREx --suffix .jsonl --temp_model mixture_predict --batch_size 32 --load output/features_train/weight/feat2_prob.pt --num_feat 2 --enforce_prob
+#python scripts/run_experiments.py --rel_file data/TREx_mine_allpids/merge_top30.jsonl --prefix data/TREx --suffix .jsonl --temp_model mixture_predict --batch_size 32 --load output/features_train/weight/feat2_prob.pt --num_feat 2 --enforce_prob --bt_obj 5
 
 get_temp_ensemble_score() {
     mkdir -p ${3}${4}
