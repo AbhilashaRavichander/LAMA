@@ -143,6 +143,9 @@ def rank_templates(args):
                 scores.append(np.mean(list(map(float, l.strip().split(' ')[1].split('\t')))))
     temp_set = set()
     templates_new, scores_new = [], []
+    if args.exclude_first:
+        templates = templates[1:]
+        scores = scores[1:]
     for temp, score in zip(templates, scores):
         if temp in temp_set:
             continue
@@ -444,6 +447,7 @@ if __name__ == '__main__':
     parser.add_argument('--out', type=str, help='output file')
     parser.add_argument('--temp_file', type=str, help='pid and raw temp file', default=None)
     parser.add_argument('--beam', type=int, help='beam size', default=None)
+    parser.add_argument('--exclude_first', help='whether to exclude the first template (manual)', action='store_true')
     args = parser.parse_args()
 
     if args.task == 'out':

@@ -26,6 +26,7 @@ grep -P '^H' ${forward_temp_file} | awk -F'[\t]' '{print $3}' | fairseq-interact
     --beam ${beam} --nbest ${beam} &> ${backward_temp_file}
 
 # collect templates
+mkdir -p ${final_temp_dir}
 python scripts/ana.py \
     --task bt_filter \
     --temp_file data/TREx_mt/rel.txt:${raw_temp_file} \
