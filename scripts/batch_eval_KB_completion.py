@@ -890,18 +890,25 @@ def main(args,
             label_index_tensor = torch.cat(label_index_tensor_list, 0)
             min_loss = 1e10
             es = 0
+            batch_size = 128
             for e in range(500):
-                optimizer.zero_grad()
-                loss = temp_model_(args.relation, features.cuda(), target=label_index_tensor.cuda(), use_softmax=True)
-                loss.backward()
-                optimizer.step()
-                dev_loss = loss
+                # loss = temp_model_(args.relation, features.cuda(), target=label_index_tensor.cuda(), use_softmax=True)
+                loss_li = []
+                for b in range(0, features.size(0), batch_size):
+                    features_b = features[b:b + batch_size].cuda()
+                    label_index_tensor_b = label_index_tensor[b:b + batch_size].cuda()
+                    loss = temp_model_(args.relation, features_b, target=label_index_tensor_b, use_softmax=True)
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
+                    loss_li.append(loss.cpu().item())
+                dev_loss = np.mean(loss_li)
                 if dev_loss - min_loss < -1e-3:
                     min_loss = dev_loss
                     es = 0
                 else:
                     es += 1
-                    if es >= 10:
+                    if es >= 30:
                         print('early stop')
                         break
             temp_model_.cpu()
