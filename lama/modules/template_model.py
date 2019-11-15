@@ -1,6 +1,7 @@
 from typing import Dict
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class TempModel(nn.Module):
@@ -19,7 +20,8 @@ class TempModel(nn.Module):
     def forward(self,
                 relation: str,
                 features: torch.FloatTensor,  # SHAPE: (batch_size, num_temp, vocab_size)
-                target: torch.LongTensor=None  # SHAPE: (batch_size,)
+                target: torch.LongTensor=None,  # SHAPE: (batch_size,)
+                use_softmax: bool=False
                 ):
         weight = getattr(self, relation)
         num_temp = min(features.size(1), weight.size(0))
@@ -34,6 +36,9 @@ class TempModel(nn.Module):
         if len(features.size()) == 3:
             # SHAPE: (batch_size, vocab_size)
             features = (features * weight.view(1, -1, 1)).sum(1)
+            if use_softmax:
+                # SHAPE: (batch_size, vocab_size)
+                features = F.log_softmax(features, dim=-1)
             if target is not None:
                 #loss = nn.CrossEntropyLoss(reduction='mean')(features, target)
                 # SHAPE: (batch_size,)
@@ -52,6 +57,3 @@ class TempModel(nn.Module):
         else:
             raise NotImplementedError
         return features
-
-
-

@@ -213,28 +213,11 @@ def run_experiments(
                 continue
             elif temp_model[1] is not None:  # train temp model
                 if feature_dir is None:
-                    max_dev_acc = -1e10
-                    es = 0
-                    for e in range(100):
-                        loss = run_evaluation(args, shuffle_data=True, model=model,
-                                              refine_template=bool(refine_template),
-                                              get_objs=get_objs, dynamic=dynamic,
-                                              use_prob=use_prob, bt_obj=bt_obj,
-                                              temp_model=temp_model)
-                        dev_acc = run_evaluation(args, shuffle_data=False, model=model,
-                                                  refine_template=bool(refine_template),
-                                                  get_objs=get_objs, dynamic=dynamic,
-                                                  use_prob=use_prob, bt_obj=bt_obj,
-                                                 temp_model=(temp_model[0], None))
-                        if dev_acc > max_dev_acc:
-                            max_dev_acc = dev_acc
-                            es = 0
-                        else:
-                            es += 1
-                            if es >= 3:  # early stop
-                                print('early stop')
-                                break
-                        print('Loss\t{}\t{}\t{}'.format(relation['relation'], loss, dev_acc))
+                    loss = run_evaluation(args, shuffle_data=False, model=model,
+                                          refine_template=bool(refine_template),
+                                          get_objs=get_objs, dynamic=dynamic,
+                                          use_prob=use_prob, bt_obj=bt_obj,
+                                          temp_model=temp_model)
                 else:
                     temp_model_, optimizer = temp_model
                     temp_model_.cuda()

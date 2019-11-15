@@ -490,6 +490,7 @@ def main(args,
     loss_list = []
     features_list = []
     bt_features_list = []
+    label_index_tensor_list = []
 
     for i in tqdm(range(len(samples_batches_li))):
 
@@ -670,15 +671,16 @@ def main(args,
                                         index=label_index_tensor.repeat(lp.size(1)).view(-1, 1))
                 features = features.view(-1, lp.size(1))
                 features_list.append(features)
-                if bt_obj is None:
+                if bt_obj:
                     continue
             elif optimizer is not None:  # train on the fly
-                optimizer.zero_grad()
-                loss = temp_model_(args.relation, filter_lp_merge.detach(), target=label_index_tensor.detach())
-                loss.backward()
-                optimizer.step()
-                loss_list.append(loss.item())
-                continue
+                features_list.append(filter_lp_merge)  # collect features that will later be used in optimization
+                label_index_tensor_list.append(label_index_tensor)  # collect labels
+                if not bt_obj:
+                    continue
+                else:
+                    #filter_lp_merge = temp_model_(args.relation, filter_lp_merge.detach(), target=None)
+                    filter_lp_merge = filter_lp_merge.mean(1)  # use average prob to beam search
 
         if dynamic.startswith('real_lm_topk') or \
                 dynamic.startswith('obj_lm_topk') or \
@@ -708,6 +710,12 @@ def main(args,
             elif optimizer == 'precompute':  # use ground truth
                 objs_ind = label_index_tensor.view(-1, 1)
                 bt_obj = 1
+            elif optimizer is not None:  # get both ground truth and beam search
+                # SHAPE: (batch_size, bt_obj)
+                objs_score, objs_ind = filter_lp_merge.topk(bt_obj, dim=-1)
+                objs_ind = torch.cat([objs_ind, label_index_tensor.view(-1, 1)], -1)
+                objs_ind = torch.sort(objs_ind, dim=-1)[0]  # the index must be ascending
+                bt_obj += 1
 
             # bach translation
             sub_lp_list = []
@@ -737,6 +745,13 @@ def main(args,
 
             if optimizer == 'precompute':
                 bt_features_list.append(sub_lp_list.squeeze(-1))
+                continue
+            elif optimizer is not None:
+                sub_lp_list_expand = torch.zeros_like(filter_lp_unmerge)
+                # SHAPE: (batch_size, num_temp, vocab_size)
+                sub_lp_list_expand.scatter_(-1, objs_ind.unsqueeze(1).repeat(1, num_temp, 1), sub_lp_list)
+                bt_features_list.append(sub_lp_list_expand)
+                bt_obj -= 1
                 continue
 
             # select obj prob
@@ -863,7 +878,34 @@ def main(args,
                 features = torch.cat([features, bt_features], 1)
             return features
         if temp_model[1] is not None:
-            return np.mean(loss_list)
+            # optimize the model on the fly
+            temp_model_, optimizer = temp_model
+            temp_model_.cuda()
+            # SHAPE: (batch_size, num_temp, vocab_size)
+            features = torch.cat(features_list, 0)
+            if bt_obj:
+                bt_features = torch.cat(bt_features_list, 0)
+                features = torch.cat([features, bt_features], 1)
+            # SHAPE: (batch_size,)
+            label_index_tensor = torch.cat(label_index_tensor_list, 0)
+            min_loss = 1e10
+            es = 0
+            for e in range(500):
+                optimizer.zero_grad()
+                loss = temp_model_(args.relation, features.cuda(), target=label_index_tensor.cuda(), use_softmax=True)
+                loss.backward()
+                optimizer.step()
+                dev_loss = loss
+                if dev_loss - min_loss < -1e-3:
+                    min_loss = dev_loss
+                    es = 0
+                else:
+                    es += 1
+                    if es >= 10:
+                        print('early stop')
+                        break
+            temp_model_.cpu()
+            return min_loss
 
     pool.close()
     pool.join()
