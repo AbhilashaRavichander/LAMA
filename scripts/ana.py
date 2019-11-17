@@ -77,8 +77,23 @@ def out_ana_optimize(args):
                 relation = eval(l)['relation']
             #if l.strip().startswith("'relation':"):
             #    relation = l.split(':', 1)[1].strip().rstrip(',').strip("'")
-            elif l.startswith('global Precision at 1:'):
-                score = float(l.split(':', 1)[1].strip())
+                if args.obj_file and os.path.exists(os.path.join(args.obj_file, relation + '.jsonl.out')):
+                    with open(os.path.join(args.obj_file, relation + '.jsonl.out'), 'r') as fin:
+                        for l in fin:
+                            if l.startswith('sub_obj_label'):
+                                objs = l.strip().split(' ', 1)[1].split('\t')
+                                objs = objs[1:len(objs):2]
+                                break
+            #elif l.startswith('global Precision at 1:'):
+            #    score = float(l.split(':', 1)[1].strip())
+            #    relations.append(relation)
+            #    scores.append(score)
+            elif l.startswith('P1all '):
+                stat = list(map(float, l.strip().split(' ')[1].split('\t')))
+                if args.obj_file:
+                    score = avg_by_label(stat, objs)
+                else:
+                    score = np.mean(stat)
                 relations.append(relation)
                 scores.append(score)
     rel_scores = dict(zip(relations, scores))

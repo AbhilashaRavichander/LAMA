@@ -7,7 +7,7 @@ eval() {
     for file in data/TREx/*; do
         bfile=$(basename "${file}")
         outfile=${1}/${bfile}.out
-        objfile=output/exp/trex_objs/${bfile}.out
+        objfile=output/exp/trex_subobjs/${bfile}.out
         echo ${bfile}
         if [ -f "${outfile}" ]; then
             if [ $# -gt 1 ]; then
