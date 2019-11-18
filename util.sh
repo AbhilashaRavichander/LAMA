@@ -19,6 +19,14 @@ eval() {
     done
 }
 
+eval_opti() {
+    if [ $# -gt 1 ]; then
+        python scripts/ana.py --task out_ana_opti --inp $1 --obj_file output/exp/trex_subobjs
+    else
+        python scripts/ana.py --task out_ana_opti --inp $1
+    fi
+}
+
 ana() {
     set -e
     for file in data/TREx/*; do
@@ -49,6 +57,8 @@ get_ht() {
 
 if [[ $1 == 'eval' ]]; then
     eval $2 $3
+elif [[ $1 == 'eval_opti' ]]; then
+    eval_opti $2 $3
 elif [[ $1 == 'ana' ]]; then
     ana $2
 elif [[ $1 == 'get_ht' ]]; then

@@ -671,7 +671,7 @@ def main(args,
                                         index=label_index_tensor.repeat(lp.size(1)).view(-1, 1))
                 features = features.view(-1, lp.size(1))
                 features_list.append(features)
-                if bt_obj:
+                if not bt_obj:
                     continue
             elif optimizer is not None:  # train on the fly
                 features_list.append(filter_lp_merge)  # collect features that will later be used in optimization
