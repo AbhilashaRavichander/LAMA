@@ -85,7 +85,7 @@ predict() {
         --bt_obj ${bt_obj} \
         --num_feat ${num_feat} ${more} &> ${weight_file}.out
 }
-: '
+
 # extract features
 CUDA_VISIBLE_DEVICES=$cuda1 precompute data/TREx_train_train ${feature_root_dir}/feature_train &
 CUDA_VISIBLE_DEVICES=$cuda1 precompute data/TREx_train_train_dev ${feature_root_dir}/feature_train_dev &
@@ -101,43 +101,9 @@ do
     elif [ $feat_type == feature_test ]; then
         head_tail_dir=data/TREx
     fi
-    CUDA_VISIBLE_DEVICES=$cuda1 optimize ${head_tail_dir} ${feature_root_dir}/${feat_type} ${feature_root_dir}/${feat_type}/weight/feat1_log.pt 1 &
-    CUDA_VISIBLE_DEVICES=$cuda2 optimize ${head_tail_dir} ${feature_root_dir}/${feat_type} ${feature_root_dir}/${feat_type}/weight/feat1_prob.pt 1 prob &
-    CUDA_VISIBLE_DEVICES=$cuda1 optimize ${head_tail_dir} ${feature_root_dir}/${feat_type} ${feature_root_dir}/${feat_type}/weight/feat2_log.pt 2 &
-    CUDA_VISIBLE_DEVICES=$cuda2 optimize ${head_tail_dir} ${feature_root_dir}/${feat_type} ${feature_root_dir}/${feat_type}/weight/feat2_prob.pt 2 prob &
-    wait
-done
-
-# predict
-for feat_type in feature_train feature_test
-do
-    head_tail_dir=data/TREx
-    CUDA_VISIBLE_DEVICES=$cuda1 predict ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight/feat1_log.pt 1 &
-    CUDA_VISIBLE_DEVICES=$cuda2 predict ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight/feat1_prob.pt 1 prob &
-    CUDA_VISIBLE_DEVICES=$cuda1 predict ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight/feat2_log.pt 2 &
-    CUDA_VISIBLE_DEVICES=$cuda2 predict ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight/feat2_prob.pt 2 prob &
-    wait
-done
-'
-# optimize with softmax
-for feat_type in feature_train feature_test
-do
-    head_tail_dir=""
-    if [ $feat_type == feature_train ]; then
-        head_tail_dir=data/TREx_train_train
-    elif [ $feat_type == feature_test ]; then
-        head_tail_dir=data/TREx
-    fi
-    CUDA_VISIBLE_DEVICES=$cuda1 optimize_on_the_fly ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight/feat1_log_sm.pt 1 &
-    CUDA_VISIBLE_DEVICES=$cuda2 optimize_on_the_fly ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight/feat2_log_sm.pt 2 &
-    wait
-done
-
-# predict with softmax
-for feat_type in feature_train feature_test
-do
-    head_tail_dir=data/TREx
-    CUDA_VISIBLE_DEVICES=$cuda1 predict ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight/feat1_log_sm.pt 1 &
-    CUDA_VISIBLE_DEVICES=$cuda2 predict ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight/feat2_log_sm.pt 2 &
+    #(CUDA_VISIBLE_DEVICES=$cuda1 optimize ${head_tail_dir} ${feature_root_dir}/${feat_type} ${feature_root_dir}/${feat_type}/weight/feat1_log.pt 1 ; CUDA_VISIBLE_DEVICES=$cuda1 predict ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight/feat1_log.pt 1) &
+    (CUDA_VISIBLE_DEVICES=$cuda1 optimize ${head_tail_dir} ${feature_root_dir}/${feat_type} ${feature_root_dir}/${feat_type}/weight/feat1_prob.pt 1 prob ; CUDA_VISIBLE_DEVICES=$cuda1 predict data/TREx ${feature_root_dir}/${feat_type}/weight/feat1_prob.pt 1 prob) &
+    #(CUDA_VISIBLE_DEVICES=$cuda2 optimize ${head_tail_dir} ${feature_root_dir}/${feat_type} ${feature_root_dir}/${feat_type}/weight/feat2_log.pt 2 ; CUDA_VISIBLE_DEVICES=$cuda2 predict ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight/feat2_log.pt 2) &
+    (CUDA_VISIBLE_DEVICES=$cuda2 optimize ${head_tail_dir} ${feature_root_dir}/${feat_type} ${feature_root_dir}/${feat_type}/weight/feat2_prob.pt 2 prob ; CUDA_VISIBLE_DEVICES=$cuda2 predict data/TREx ${feature_root_dir}/${feat_type}/weight/feat2_prob.pt 2 prob) &
     wait
 done

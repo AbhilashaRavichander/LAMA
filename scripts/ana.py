@@ -347,6 +347,8 @@ def merge_all_rel(args, top=None):
                     temps = [rel['template'] for rel in rel_li]
                     if top:
                         temps = temps[:top]
+                    if args.exclude_first:  # remove the manual template
+                        temps = temps[1:]
                     rel_li[0]['template'] = temps
                 fout.write(json.dumps(rel_li[0]) + '\n')
 
