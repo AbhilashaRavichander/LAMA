@@ -10,9 +10,15 @@ from tqdm import tqdm
 import urllib.request
 import urllib.parse
 import time
-import torch
-from batch_eval_KB_completion import load_file
 from subprocess import Popen, PIPE
+
+
+def load_file(filename):
+    data = []
+    with open(filename, "r") as f:
+        for line in f.readlines():
+            data.append(json.loads(line))
+    return data
 
 
 def avg_by_label(scores: List, labels: Union[List, None]):
@@ -39,14 +45,16 @@ def load_out_file(args):
                     objs = l.strip().split(' ', 1)[1].split('\t')
                     subjs = objs[0:len(objs):2]
                     objs = objs[1:len(objs):2]
+        subjs = np.array(subjs)
+        objs = np.array(objs)
     with open(args.inp, 'r') as fin:
         for l in fin:
             l = l.strip()
             if l.startswith('P1all '):
-                stat.append(list(map(float, l.strip().split(' ')[1].split('\t'))))
+                stat.append(list(map(float, l.split(' ')[1].split('\t'))))
             elif l.startswith('{') and l.endswith('}'):
                 templates.append(eval(l)['template'])
-    return np.array(templates), np.array(stat), np.array(subjs), np.array(objs)
+    return np.array(templates), np.array(stat), subjs, objs
 
 
 def case_study(args):
@@ -65,7 +73,7 @@ def case_study(args):
 def out_ana(args):
     templates, stat, subjs, objs = load_out_file(args)
     obj_entropy = None
-    if objs:
+    if objs is not None:
         uni, counts = np.unique(objs, return_counts=True)
         counts = counts / np.sum(counts)
         obj_entropy = scipy.stats.entropy(counts)
@@ -400,6 +408,7 @@ def listdir_shell(path, *lsargs):
 
 
 def weight_ana(args, top=1):
+    import torch
     weight_file, relation_file = args.inp.split(':')
     relations = load_file(relation_file)
     rel2temp = dict((rel['relation'], rel['template']) for rel in relations)
