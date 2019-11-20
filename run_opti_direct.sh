@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+lm=bert_large
 merge_rel_file=$1
 feature_root_dir=$2
 cuda1=$3
@@ -17,6 +18,7 @@ optimize_on_the_fly() {  # only use for log features
     fi
     mkdir -p $(dirname "$weight_file")
     python scripts/run_experiments.py \
+        --lm_model ${lm} \
         --rel_file ${merge_rel_file} \
         --prefix ${head_tail_dir} \
         --suffix .jsonl \
@@ -40,6 +42,7 @@ predict() {
         bt_obj=5
     fi
     python scripts/run_experiments.py \
+        --lm_model ${lm} \
         --rel_file ${merge_rel_file} \
         --prefix ${head_tail_dir} \
         --suffix .jsonl \

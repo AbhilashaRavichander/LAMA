@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 
+lm=bert_large
 raw_temp_dir=$1
 raw_temp_socre_dir=$2
 raw_temp_socre_dir_train=$3
 sort_temp_dir=$4
+sort_temp_dir_nom=${sort_temp_dir}_nomanual
 sort_temp_score_dir=$5
+sort_temp_score_dir_nom=${sort_temp_score_dir}_nomanual
 top_rel=30
+
+#set -e
 
 refine_temp() {
     mkdir -p ${3}
@@ -14,6 +19,7 @@ refine_temp() {
         bfile=$(basename "${file}")
         echo ${bfile}
         python scripts/run_experiments.py \
+            --lm_model ${lm} \
             --rel_file ${1}/${bfile} \
             --prefix ${2} \
             --refine_template ${3}/${bfile} \
@@ -27,6 +33,7 @@ get_temp_score() {
         bfile=$(basename "${file}")
         echo ${bfile}
         python scripts/run_experiments.py \
+            --lm_model ${lm} \
             --rel_file ${1}/${bfile} \
             --prefix ${2} \
             --suffix .jsonl \
@@ -35,28 +42,13 @@ get_temp_score() {
    done
 }
 
-optimize_temp_score() {
-    python scripts/run_experiments.py \
-        --rel_file ${1} \
-        --prefix ${2} \
-        --suffix .jsonl \
-        --temp_model mixture \
-        --save ${3} \
-        --batch_size 32 > ${4} 2>&1
-}
-# extract features
-#python scripts/run_experiments.py --rel_file data/TREx_mine_allpids/merge_top30.jsonl --prefix data/TREx_train_train --suffix .jsonl --temp_model mixture_precompute --batch_size 32 --save output/features --num_feat 2 --bt_obj 1
-# optimize
-#python scripts/run_experiments.py --rel_file data/TREx_mine_allpids/merge_top30.jsonl --prefix data/TREx_train_train --suffix .jsonl --temp_model mixture_optimize --batch_size 32 --feature_dir output/features --save output/features_train/feat2_prob.pt --num_feat 2 --enforce_prob
-# predict
-#python scripts/run_experiments.py --rel_file data/TREx_mine_allpids/merge_top30.jsonl --prefix data/TREx --suffix .jsonl --temp_model mixture_predict --batch_size 32 --load output/features_train/weight/feat2_prob.pt --num_feat 2 --enforce_prob --bt_obj 5
-
 get_temp_ensemble_score() {
     mkdir -p ${3}${4}
     for file in ${1}/*; do
         bfile=$(basename "${file}")
         echo ${bfile}
         python scripts/run_experiments.py \
+            --lm_model ${lm} \
             --rel_file ${1}/${bfile} \
             --prefix ${2} \
             --suffix .jsonl \
@@ -74,6 +66,7 @@ get_temp_ensemble_dynamic_score() {
         bfile=$(basename "${file}")
         echo ${bfile}
         python scripts/run_experiments.py \
+            --lm_model ${lm} \
             --rel_file ${1}/${bfile} \
             --prefix ${2} \
             --suffix .jsonl \
@@ -100,21 +93,28 @@ wait
 
 # sort all the templates
 mkdir -p ${sort_temp_dir}
+mkdir -p ${sort_temp_dir_nom}
 for file in data/TREx/*; do
     bfile=$(basename "${file}")
     infile=${raw_temp_socre_dir_train}/${bfile}.out
     outfile=${sort_temp_dir}/${bfile}
+    outfile_nom=${sort_temp_dir_nom}/${bfile}
     echo ${bfile}
     if [ -f "${infile}" ]; then
         python scripts/ana.py --task sort --inp ${infile} --out ${outfile}
+        python scripts/ana.py --task sort --inp ${infile} --out ${outfile_nom} --exclude_first
     fi
 done
 
 # evaluate using the top k templates
-for top in 1 2 3
+for top in 1 2 3 4 5 6 7 8 9 10 10000
 do
     get_temp_ensemble_score ${sort_temp_dir} data/TREx/ ${sort_temp_score_dir} ${top} &
+    get_temp_ensemble_score ${sort_temp_dir_nom} data/TREx/ ${sort_temp_score_dir_nom} ${top} &
+    wait
 done
+
+: '
 wait
 
 for top in 4 5 6
@@ -134,6 +134,7 @@ do
     get_temp_ensemble_score ${sort_temp_dir} data/TREx/ ${sort_temp_score_dir} ${top} &
 done
 wait
+'
 
 : '
 # evaluate using dynamic top k templates

@@ -27,7 +27,7 @@ from os.path import isfile, join
 from shutil import copyfile
 from collections import defaultdict
 
-LMs = [
+LM_ALL = [
     {
         "lm": "transformerxl",
         "label": "transformerxl",
@@ -69,27 +69,36 @@ LMs = [
     }
 ]
 
-LMs = [
-    {
-        "lm": "bert",
-        "label": "bert_base",
-        "models_names": ["bert"],
-        "bert_model_name": "bert-base-cased",
-        "bert_model_dir": "pre-trained_language_models/bert/cased_L-12_H-768_A-12"
-    }
-]
-'''
-LMs = [
-    {
-        "lm": "roberta",
-        "label": "roberta_base",
-        "models_names": ["roberta"],
-        "roberta_model_name": "model.pt",
-        "roberta_model_dir": "pre-trained_language_models/roberta/roberta.base",
-        "roberta_vocab_name": "dict.txt"
-    }
-]
-'''
+LM_BERT_BASE = {
+    "lm": "bert",
+    "label": "bert_base",
+    "models_names": ["bert"],
+    "bert_model_name": "bert-base-cased",
+    "bert_model_dir": "pre-trained_language_models/bert/cased_L-12_H-768_A-12"
+}
+
+LM_BERT_LARGE = {
+    "lm": "bert",
+    "label": "bert_large",
+    "models_names": ["bert"],
+    "bert_model_name": "bert-large-cased",
+    "bert_model_dir": "pre-trained_language_models/bert/cased_L-24_H-1024_A-16"
+}
+
+LM_ROBERTA_BASE = {
+    "lm": "roberta",
+    "label": "roberta_base",
+    "models_names": ["roberta"],
+    "roberta_model_name": "model.pt",
+    "roberta_model_dir": "pre-trained_language_models/roberta/roberta.base",
+    "roberta_vocab_name": "dict.txt"
+}
+
+name2lm = {
+    'bert_base': LM_BERT_BASE,
+    'bert_large': LM_BERT_LARGE,
+    'roberta_base': LM_ROBERTA_BASE,
+}
 
 def run_experiments(
     relations,
@@ -395,9 +404,9 @@ def get_Squad_parameters(data_path_pre="data/"):
     return relations, data_path_pre, data_path_post
 
 
-def run_all_LMs(parameters):
+def run_all_LMs(parameters, LMs):
     for ip in LMs:
-        print(ip["label"])
+        print(ip['label'])
         run_experiments(*parameters, input_param=ip)
 
 
@@ -421,6 +430,7 @@ if __name__ == "__main__":
     '''
     logging.disable(logging.WARNING)
     parser = argparse.ArgumentParser(description='run exp for multiple relational phrase')
+    parser.add_argument('--lm_model', type=str, default='bert_base', choices=['bert_base', 'bert_large', 'roberta_base'])
     parser.add_argument('--rel_file', type=str, default='data/Google_RE_patty_template/place_of_death.jsonl')
     parser.add_argument('--refine_template', type=str, default=None)
     parser.add_argument('--prefix', type=str, default='data/Google_RE/')
@@ -441,4 +451,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     parameters = get_relation_phrase_parameters(args)
     #parameters = get_test_phrase_parameters(args)
-    run_all_LMs(parameters)
+    run_all_LMs(parameters, [name2lm[lm] for lm in args.lm_model.split(':')])

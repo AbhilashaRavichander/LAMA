@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+lm=bert_large
 merge_rel_file=$1
 feature_root_dir=$2
 cuda1=$3
@@ -12,6 +13,7 @@ precompute() {
     feature_dir=$2
     mkdir -p ${feature_dir}
     python scripts/run_experiments.py \
+        --lm_model ${lm} \
         --rel_file ${merge_rel_file} \
         --prefix ${head_tail_dir} \
         --suffix .jsonl \
@@ -33,6 +35,7 @@ optimize() {
     fi
     mkdir -p $(dirname "$weight_file")
     python scripts/run_experiments.py \
+        --lm_model ${lm} \
         --rel_file ${merge_rel_file} \
         --prefix ${head_tail_dir} \
         --suffix .jsonl \
@@ -41,26 +44,6 @@ optimize() {
         --feature_dir ${feature_dir} \
         --save ${weight_file} \
         --num_feat ${num_feat} ${more}
-}
-
-optimize_on_the_fly() {  # only use for log features
-    head_tail_dir=$1
-    weight_file=$2
-    num_feat=$3
-    bt_obj=0
-    if [ $num_feat == 2 ]; then
-        bt_obj=5
-    fi
-    mkdir -p $(dirname "$weight_file")
-    python scripts/run_experiments.py \
-        --rel_file ${merge_rel_file} \
-        --prefix ${head_tail_dir} \
-        --suffix .jsonl \
-        --temp_model mixture_optimize \
-        --batch_size 32 \
-        --save ${weight_file} \
-        --num_feat ${num_feat} \
-        --bt_obj ${bt_obj}
 }
 
 predict() {
@@ -76,6 +59,7 @@ predict() {
         bt_obj=5
     fi
     python scripts/run_experiments.py \
+        --lm_model ${lm} \
         --rel_file ${merge_rel_file} \
         --prefix ${head_tail_dir} \
         --suffix .jsonl \
