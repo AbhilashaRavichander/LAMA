@@ -27,20 +27,18 @@ def avg_by_label(scores: List, labels: Union[List, None]):
     return np.mean([label2score[k] / label2count[k] for k in label2score])
 
 
-def out_ana(args):
+def load_out_file(args):
     stat = []
     templates = []
+    subjs = None
     objs = None
-    obj_entropy = None
     if args.obj_file:
         with open(args.obj_file, 'r') as fin:
             for l in fin:
                 if l.startswith('sub_obj_label'):
                     objs = l.strip().split(' ', 1)[1].split('\t')
+                    subjs = objs[0:len(objs):2]
                     objs = objs[1:len(objs):2]
-        uni, counts = np.unique(objs, return_counts=True)
-        counts = counts / np.sum(counts)
-        obj_entropy = scipy.stats.entropy(counts)
     with open(args.inp, 'r') as fin:
         for l in fin:
             l = l.strip()
@@ -48,7 +46,29 @@ def out_ana(args):
                 stat.append(list(map(float, l.strip().split(' ')[1].split('\t'))))
             elif l.startswith('{') and l.endswith('}'):
                 templates.append(eval(l)['template'])
-    stat = np.array(stat)
+    return np.array(templates), np.array(stat), np.array(subjs), np.array(objs)
+
+
+def case_study(args):
+    templates, stat, subjs, objs = load_out_file(args)
+    best_ind = np.argmax(stat.mean(-1))
+    print('manual {}'.format(templates[0]))
+    print('best {} {}'.format(best_ind, templates[best_ind]))
+    cases_ind = (stat[best_ind] - stat[0]) > 0
+    cases = np.array(list(zip(subjs[cases_ind], objs[cases_ind])))
+    print('#cases {}'.format(len(cases)))
+    show = np.random.permutation(len(cases))[:10]
+    show = list(range(10))
+    print(cases[show])
+
+
+def out_ana(args):
+    templates, stat, subjs, objs = load_out_file(args)
+    obj_entropy = None
+    if objs:
+        uni, counts = np.unique(objs, return_counts=True)
+        counts = counts / np.sum(counts)
+        obj_entropy = scipy.stats.entropy(counts)
     first = avg_by_label(stat[0], objs)  # the first template is manually designed
     ensemble_score = avg_by_label(np.max(stat, 0), objs)  # ensemble all the templates
     if len(stat) > 1:
@@ -458,7 +478,7 @@ if __name__ == '__main__':
     parser.add_argument('--task', type=str, help='task', required=True, 
         choices=['out', 'wikidata', 'sort', 'major_class', 'get_train_data',
                  'get_ppdb', 'case', 'merge_all_rel', 'split_dev', 'weight_ana',
-                 'out_ana_opti', 'bt_filter'])
+                 'out_ana_opti', 'bt_filter', 'case_study'])
     parser.add_argument('--inp', type=str, help='input file')
     parser.add_argument('--obj_file', type=str, help='obj file', default=None)
     parser.add_argument('--out', type=str, help='output file')
@@ -491,3 +511,5 @@ if __name__ == '__main__':
         out_ana_optimize(args)
     elif args.task == 'bt_filter':
         bt_filter(args)
+    elif args.task == 'case_study':
+        case_study(args)
