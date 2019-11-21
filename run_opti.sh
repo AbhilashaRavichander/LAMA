@@ -3,10 +3,11 @@
 lm=bert_large
 merge_rel_file=$1
 feature_root_dir=$2
-cuda1=$3
-cuda2=$4
+temp=$3
+cuda1=$4
+cuda2=$5
 
-#set -e
+set -e
 
 precompute() {
     head_tail_dir=$1
@@ -29,8 +30,9 @@ optimize() {
     feature_dir=$2
     weight_file=$3
     num_feat=$4
+    temperature=$5
     more=""
-    if [ $# -gt 4 ]; then
+    if [ $# -gt 5 ]; then
         more=--enforce_prob
     fi
     mkdir -p $(dirname "$weight_file")
@@ -43,7 +45,8 @@ optimize() {
         --batch_size 32 \
         --feature_dir ${feature_dir} \
         --save ${weight_file} \
-        --num_feat ${num_feat} ${more}
+        --num_feat ${num_feat} ${more} \
+        --temperature ${temperature}
 }
 
 predict() {
@@ -70,11 +73,13 @@ predict() {
         --num_feat ${num_feat} ${more} &> ${weight_file}.out
 }
 
+: '
 # extract features
 CUDA_VISIBLE_DEVICES=$cuda1 precompute data/TREx_train_train ${feature_root_dir}/feature_train &
 CUDA_VISIBLE_DEVICES=$cuda1 precompute data/TREx_train_train_dev ${feature_root_dir}/feature_train_dev &
 CUDA_VISIBLE_DEVICES=$cuda2 precompute data/TREx ${feature_root_dir}/feature_test &
 wait
+'
 
 # optimize
 for feat_type in feature_train feature_test
@@ -86,8 +91,8 @@ do
         head_tail_dir=data/TREx
     fi
     #(CUDA_VISIBLE_DEVICES=$cuda1 optimize ${head_tail_dir} ${feature_root_dir}/${feat_type} ${feature_root_dir}/${feat_type}/weight/feat1_log.pt 1 ; CUDA_VISIBLE_DEVICES=$cuda1 predict ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight/feat1_log.pt 1) &
-    (CUDA_VISIBLE_DEVICES=$cuda1 optimize ${head_tail_dir} ${feature_root_dir}/${feat_type} ${feature_root_dir}/${feat_type}/weight/feat1_prob.pt 1 prob ; CUDA_VISIBLE_DEVICES=$cuda1 predict data/TREx ${feature_root_dir}/${feat_type}/weight/feat1_prob.pt 1 prob) &
+    (CUDA_VISIBLE_DEVICES=$cuda1 optimize ${head_tail_dir} ${feature_root_dir}/${feat_type} ${feature_root_dir}/${feat_type}/weight_${temp}/feat1_prob.pt 1 ${temp} prob ; CUDA_VISIBLE_DEVICES=$cuda1 predict data/TREx ${feature_root_dir}/${feat_type}/weight_${temp}/feat1_prob.pt 1 prob) &
     #(CUDA_VISIBLE_DEVICES=$cuda2 optimize ${head_tail_dir} ${feature_root_dir}/${feat_type} ${feature_root_dir}/${feat_type}/weight/feat2_log.pt 2 ; CUDA_VISIBLE_DEVICES=$cuda2 predict ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight/feat2_log.pt 2) &
-    (CUDA_VISIBLE_DEVICES=$cuda2 optimize ${head_tail_dir} ${feature_root_dir}/${feat_type} ${feature_root_dir}/${feat_type}/weight/feat2_prob.pt 2 prob ; CUDA_VISIBLE_DEVICES=$cuda2 predict data/TREx ${feature_root_dir}/${feat_type}/weight/feat2_prob.pt 2 prob) &
+    (CUDA_VISIBLE_DEVICES=$cuda2 optimize ${head_tail_dir} ${feature_root_dir}/${feat_type} ${feature_root_dir}/${feat_type}/weight_${temp}/feat2_prob.pt 2 ${temp} prob ; CUDA_VISIBLE_DEVICES=$cuda2 predict data/TREx ${feature_root_dir}/${feat_type}/weight_${temp}/feat2_prob.pt 2 prob) &
     wait
 done

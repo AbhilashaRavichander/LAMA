@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 
-lm=bert_large
+lm=bert_base
 merge_rel_file=$1
 feature_root_dir=$2
-cuda1=$3
-cuda2=$4
+temp=$3
+cuda1=$4
+cuda2=$5
 
-#set -e
+set -e
 
 optimize_on_the_fly() {  # only use for log features
     head_tail_dir=$1
     weight_file=$2
     num_feat=$3
+    temperature=$4
     bt_obj=0
     if [ $num_feat == 2 ]; then
         bt_obj=5
@@ -26,7 +28,8 @@ optimize_on_the_fly() {  # only use for log features
         --batch_size 32 \
         --save ${weight_file} \
         --num_feat ${num_feat} \
-        --bt_obj ${bt_obj}
+        --bt_obj ${bt_obj} \
+        --temperature ${temperature}
 }
 
 predict() {
@@ -62,7 +65,7 @@ do
     elif [ $feat_type == feature_test ]; then
         head_tail_dir=data/TREx
     fi
-    (CUDA_VISIBLE_DEVICES=$cuda1 optimize_on_the_fly ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight/feat1_log_sm.pt 1 ; CUDA_VISIBLE_DEVICES=$cuda1 predict data/TREx ${feature_root_dir}/${feat_type}/weight/feat1_log_sm.pt 1) &
-    (CUDA_VISIBLE_DEVICES=$cuda2 optimize_on_the_fly ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight/feat2_log_sm.pt 2 ; CUDA_VISIBLE_DEVICES=$cuda2 predict data/TREx ${feature_root_dir}/${feat_type}/weight/feat2_log_sm.pt 2) &
+    (CUDA_VISIBLE_DEVICES=$cuda1 optimize_on_the_fly ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight_${temp}/feat1_log_sm.pt 1 ${temp} ; CUDA_VISIBLE_DEVICES=$cuda1 predict data/TREx ${feature_root_dir}/${feat_type}/weight_${temp}/feat1_log_sm.pt 1) &
+    (CUDA_VISIBLE_DEVICES=$cuda2 optimize_on_the_fly ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight_${temp}/feat2_log_sm.pt 2 ${temp} ; CUDA_VISIBLE_DEVICES=$cuda2 predict data/TREx ${feature_root_dir}/${feat_type}/weight_${temp}/feat2_log_sm.pt 2) &
     wait
 done

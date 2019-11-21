@@ -116,6 +116,7 @@ def run_experiments(
     feature_dir=None,
     enforce_prob=True,
     num_feat=1,
+    temperature=0.0,
     input_param={
         "lm": "bert",
         "label": "bert_large",
@@ -152,7 +153,7 @@ def run_experiments(
                 temp_model = TempModel(rel2numtemp, enforce_prob=enforce_prob, num_feat=num_feat)
                 temp_model.train()
                 optimizer = optim.Adam(temp_model.parameters(), lr=1e-1)
-                temp_model = (temp_model, optimizer)
+                temp_model = (temp_model, (optimizer, temperature))
             elif method == 'precompute':  # extract feature
                 temp_model = (None, 'precompute')
             elif method == 'predict':  # predict
@@ -228,7 +229,7 @@ def run_experiments(
                                           use_prob=use_prob, bt_obj=bt_obj,
                                           temp_model=temp_model)
                 else:
-                    temp_model_, optimizer = temp_model
+                    temp_model_, (optimizer, temperature) = temp_model
                     temp_model_.cuda()
                     min_loss = 1e10
                     es = 0
@@ -356,9 +357,10 @@ def get_relation_phrase_parameters(args):
     feature_dir = args.feature_dir
     enforce_prob = args.enforce_prob
     num_feat = args.num_feat
+    temperature = float(args.temperature)
     return relations, data_path_pre, data_path_post, args.refine_template, \
            args.get_objs, args.batch_size, args.dynamic, args.use_prob, \
-           bt_obj, temp_model, save, load, feature_dir, enforce_prob, num_feat
+           bt_obj, temp_model, save, load, feature_dir, enforce_prob, num_feat, temperature
 
 
 def get_test_phrase_parameters(args):
@@ -379,15 +381,17 @@ def get_test_phrase_parameters(args):
     batch_size = 32
     dynamic = 'none'
     use_prob = False
-    bt_obj = 5
-    temp_model = 'mixture_predict'
+    bt_obj = 0
+    temp_model = 'mixture_optimize'
     save = None
     load = None
     feature_dir = None
-    enforce_prob = True
-    num_feat = 1
+    enforce_prob = False
+    num_feat = 1,
+    temperature = 1.0
     return relations, data_path_pre, data_path_post, refine_template, get_objs, \
-           batch_size, dynamic, use_prob, bt_obj, temp_model, save, load, feature_dir, enforce_prob, num_feat
+           batch_size, dynamic, use_prob, bt_obj, temp_model, save, load, feature_dir, \
+           enforce_prob, num_feat, temperature
 
 
 def get_ConceptNet_parameters(data_path_pre="data/"):
@@ -448,6 +452,7 @@ if __name__ == "__main__":
     parser.add_argument('--bt_obj', type=int, help='beam size of bach translation', default=None)
     parser.add_argument('--enforce_prob', help='whether force the feature to be prob', action='store_true')
     parser.add_argument('--num_feat', type=int, help='number of features', default=1)
+    parser.add_argument('--temperature', type=float, help='temperature for sample weight', default=0.0)
     args = parser.parse_args()
     parameters = get_relation_phrase_parameters(args)
     #parameters = get_test_phrase_parameters(args)

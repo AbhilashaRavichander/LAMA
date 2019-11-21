@@ -879,15 +879,20 @@ def main(args,
             return features
         if temp_model[1] is not None:
             # optimize the model on the fly
-            temp_model_, optimizer = temp_model
+            temp_model_, (optimizer, temperature) = temp_model
             temp_model_.cuda()
             # SHAPE: (batch_size, num_temp, vocab_size)
             features = torch.cat(features_list, 0)
             if bt_obj:
                 bt_features = torch.cat(bt_features_list, 0)
                 features = torch.cat([features, bt_features], 1)
+            # compute weight
+            temprature = 1.0
             # SHAPE: (batch_size,)
             label_index_tensor = torch.cat(label_index_tensor_list, 0)
+            label_count = torch.bincount(label_index_tensor)
+            label_count = torch.index_select(label_count, 0, label_index_tensor)
+            sample_weight = F.softmax(temperature * torch.log(1.0 / label_count.float()), 0) * label_index_tensor.size(0)
             min_loss = 1e10
             es = 0
             batch_size = 128
@@ -897,7 +902,8 @@ def main(args,
                 for b in range(0, features.size(0), batch_size):
                     features_b = features[b:b + batch_size].cuda()
                     label_index_tensor_b = label_index_tensor[b:b + batch_size].cuda()
-                    loss = temp_model_(args.relation, features_b, target=label_index_tensor_b, use_softmax=True)
+                    sample_weight_b = sample_weight[b:b + batch_size].cuda()
+                    loss = temp_model_(args.relation, features_b, target=label_index_tensor_b, sample_weight=sample_weight_b, use_softmax=True)
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()

@@ -21,6 +21,7 @@ class TempModel(nn.Module):
                 relation: str,
                 features: torch.FloatTensor,  # SHAPE: (batch_size, num_temp, vocab_size)
                 target: torch.LongTensor=None,  # SHAPE: (batch_size,)
+                sample_weight: torch.FloatTensor=None,  # SHAPE: (batch_size,)
                 use_softmax: bool=False
                 ):
         weight = getattr(self, relation)
@@ -45,6 +46,8 @@ class TempModel(nn.Module):
                 loss = torch.gather(features, dim=1, index=target.view(-1, 1))
                 if self.enforce_prob:
                     loss = loss.log()
+                if sample_weight is not None:
+                    loss = loss * sample_weight
                 loss = -loss.mean()
                 return loss
         elif len(features.size()) == 2:
@@ -52,6 +55,8 @@ class TempModel(nn.Module):
             loss = (features * weight.view(1, -1)).sum(1)
             if self.enforce_prob:
                 loss = loss.log()
+            if sample_weight is not None:
+                loss = loss * sample_weight
             loss = -loss.mean()
             return loss
         else:

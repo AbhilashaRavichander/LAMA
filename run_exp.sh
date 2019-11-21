@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-lm=bert_large
+lm=bert_base
 raw_temp_dir=$1
 raw_temp_socre_dir=$2
 raw_temp_socre_dir_train=$3
