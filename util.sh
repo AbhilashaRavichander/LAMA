@@ -27,6 +27,23 @@ eval_opti() {
     fi
 }
 
+eval_all() {
+    set -e
+    for file in data/TREx/*; do
+        bfile=$(basename "${file}")
+        outfile=${1}/${bfile}.out
+        objfile=output/exp/trex_subobjs/${bfile}.out
+        echo ${bfile}
+        if [ -f "${outfile}" ]; then
+            if [ $# -gt 1 ]; then
+                python scripts/ana.py --task out_all_ana --inp ${outfile} --obj_file ${objfile}
+            else
+                python scripts/ana.py --task out_all_ana --inp ${outfile}
+            fi
+        fi
+    done
+}
+
 ana() {
     set -e
     for file in data/TREx/*; do
@@ -57,6 +74,8 @@ get_ht() {
 
 if [[ $1 == 'eval' ]]; then
     eval $2 $3
+elif [[ $1 == 'eval_all' ]]; then
+    eval_all $2 $3
 elif [[ $1 == 'eval_opti' ]]; then
     eval_opti $2 $3
 elif [[ $1 == 'ana' ]]; then

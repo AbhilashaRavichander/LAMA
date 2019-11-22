@@ -94,6 +94,12 @@ def out_ana(args):
     print('obj entropy: {}'.format(obj_entropy))
 
 
+def out_all_ana(args):
+    templates, stat, subjs, objs = load_out_file(args)
+    temp_scores = np.array([avg_by_label(s, objs) for s in stat])
+    print('\t'.join(map(str, temp_scores)))
+
+
 def out_ana_optimize(args):
     relations = []
     scores = []
@@ -487,7 +493,7 @@ if __name__ == '__main__':
     parser.add_argument('--task', type=str, help='task', required=True, 
         choices=['out', 'wikidata', 'sort', 'major_class', 'get_train_data',
                  'get_ppdb', 'case', 'merge_all_rel', 'split_dev', 'weight_ana',
-                 'out_ana_opti', 'bt_filter', 'case_study'])
+                 'out_ana_opti', 'bt_filter', 'case_study', 'out_all_ana'])
     parser.add_argument('--inp', type=str, help='input file')
     parser.add_argument('--obj_file', type=str, help='obj file', default=None)
     parser.add_argument('--out', type=str, help='output file')
@@ -498,6 +504,8 @@ if __name__ == '__main__':
 
     if args.task == 'out':
         out_ana(args)
+    elif args.task == 'out_all_ana':
+        out_all_ana(args)
     elif args.task == 'wikidata':
         wikidata_to_trex(args)
     elif args.task == 'sort':
