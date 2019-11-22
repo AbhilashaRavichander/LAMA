@@ -362,23 +362,42 @@ def main(args,
     with open("{}/args.json".format(log_directory), "w") as outfile:
         json.dump(vars(args), outfile)
 
-    # stats
-    samples_with_negative_judgement = 0
-    samples_with_positive_judgement = 0
+    if dynamic == 'all_topk':  # save topk results for different k
+        # stats
+        samples_with_negative_judgement = [0 for _ in range(len(args.template))]
+        samples_with_positive_judgement = [0 for _ in range(len(args.template))]
 
-    # Mean reciprocal rank
-    MRR = 0.0
-    MRR_negative = 0.0
-    MRR_positive = 0.0
+        # Mean reciprocal rank
+        MRR = [0.0 for _ in range(len(args.template))]
+        MRR_negative = [0.0 for _ in range(len(args.template))]
+        MRR_positive = [0.0 for _ in range(len(args.template))]
 
-    # Precision at (default 10)
-    Precision = 0.0
-    Precision1 = 0.0
-    Precision_negative = 0.0
-    Precision_positivie = 0.0
+        # Precision at (default 10)
+        Precision = [0.0 for _ in range(len(args.template))]
+        Precision1 = [0.0 for _ in range(len(args.template))]
+        Precision_negative = [0.0 for _ in range(len(args.template))]
+        Precision_positivie = [0.0 for _ in range(len(args.template))]
 
-    P1_li = []
-    obj_labels = []
+        list_of_results = [[] for _ in range(len(args.template))]
+        P1_li = [[] for _ in range(len(args.template))]
+    else:
+        # stats
+        samples_with_negative_judgement = [0]
+        samples_with_positive_judgement = [0]
+
+        # Mean reciprocal rank
+        MRR = [0.0]
+        MRR_negative = [0.0]
+        MRR_positive = [0.0]
+
+        # Precision at (default 10)
+        Precision = [0.0]
+        Precision1 = [0.0]
+        Precision_negative = [0.0]
+        Precision_positivie = [0.0]
+
+        list_of_results = [[]]
+        P1_li = [[]]
 
     data = load_file(args.dataset_filename)
 
@@ -479,7 +498,6 @@ def main(args,
         # use all available threads
         num_threads = multiprocessing.cpu_count()
     pool = ThreadPool(num_threads)
-    list_of_results = []
 
     samples_batches_li = list(zip(*samples_batches_li))
     sentences_batches_li = list(zip(*sentences_batches_li))
@@ -601,6 +619,8 @@ def main(args,
             else:
                 if dynamic == 'none' and temp_model is None:
                     filter_lp_merge = [a + b for a, b in zip(filter_lp_merge, filtered_log_probs_list)]
+                elif dynamic == 'all_topk':
+                    filter_lp_merge.extend(filtered_log_probs_list)
                 elif dynamic == 'lm' or dynamic == 'real_lm':
                     filter_lp_merge = \
                         [a if c >= d else b for a, b, c, d in
@@ -643,7 +663,8 @@ def main(args,
             label_index_list.append(obj_label_id)
             obj_word_list.append(sample['obj_label'])
 
-        if dynamic.startswith('real_lm_topk') or \
+        if dynamic == 'all_topk' or \
+                dynamic.startswith('real_lm_topk') or \
                 dynamic.startswith('obj_lm_topk') or \
                 dynamic.startswith('obj_lmgap_topk') or \
                 dynamic.startswith('bt_topk') or \
@@ -656,6 +677,9 @@ def main(args,
             c_inc = np.array(metrics.analyze_prob(
                 filter_lp_merge, label_index_tensor, output=False, method='sample'))
             c_inc_stat += c_inc
+        elif dynamic == 'none':
+            # SHAPE: (batch_size, 1, filter_vocab_size)
+            filter_lp_merge = torch.stack(filter_lp_merge, 0).unsqueeze(1)
 
         # SHAPE: (batch_size, num_temp, filter_vocab_size)
         filter_lp_unmerge = filter_lp_merge
@@ -770,105 +794,107 @@ def main(args,
             filter_lp_merge_expand.scatter_(-1, objs_ind, filter_lp_merge)
             filter_lp_merge = filter_lp_merge_expand + expand_mask[:, 0, :].log()  # mask out other objs
 
-        arguments = [
-            {
-                "original_log_probs": original_log_probs,
-                "filtered_log_probs": filtered_log_probs,
-                "token_ids": token_ids,
-                "vocab": model.vocab,
-                "label_index": label_index[0],
-                "masked_indices": masked_indices,
-                "interactive": args.interactive,
-                "index_list": index_list,
-                "sample": sample,
-            }
-            for original_log_probs, filtered_log_probs, token_ids, masked_indices, label_index, sample in zip(
-                original_log_probs_list,
-                filter_lp_merge,
-                token_ids_list,
-                masked_indices_list,
-                label_index_list,
-                samples_b,
-            )
-        ]
+        for temp_id in range(filter_lp_merge.size(1)):
 
-        # single thread for debug
-        # for isx,a in enumerate(arguments):
-        #     print(samples_b[isx])
-        #     run_thread(a)
+            arguments = [
+                {
+                    "original_log_probs": original_log_probs,
+                    "filtered_log_probs": filtered_log_probs,
+                    "token_ids": token_ids,
+                    "vocab": model.vocab,
+                    "label_index": label_index[0],
+                    "masked_indices": masked_indices,
+                    "interactive": args.interactive,
+                    "index_list": index_list,
+                    "sample": sample,
+                }
+                for original_log_probs, filtered_log_probs, token_ids, masked_indices, label_index, sample in zip(
+                    original_log_probs_list,
+                    filter_lp_merge[:, :temp_id + 1].sum(1),
+                    token_ids_list,
+                    masked_indices_list,
+                    label_index_list,
+                    samples_b,
+                )
+            ]
 
-        # multithread
-        res = pool.map(run_thread, arguments)
+            # single thread for debug
+            # for isx,a in enumerate(arguments):
+            #     print(samples_b[isx])
+            #     run_thread(a)
 
-        for idx, result in enumerate(res):
+            # multithread
+            res = pool.map(run_thread, arguments)
 
-            result_masked_topk, sample_MRR, sample_P, sample_perplexity, msg = result
+            for idx, result in enumerate(res):
 
-            logger.info("\n" + msg + "\n")
+                result_masked_topk, sample_MRR, sample_P, sample_perplexity, msg = result
 
-            sample = samples_b[idx]
+                logger.info("\n" + msg + "\n")
 
-            element = {}
-            element["sample"] = sample
-            element["uuid"] = sample["uuid"]
-            element["token_ids"] = token_ids_list[idx]
-            element["masked_indices"] = masked_indices_list[idx]
-            element["label_index"] = label_index_list[idx]
-            element["masked_topk"] = result_masked_topk
-            element["sample_MRR"] = sample_MRR
-            element["sample_Precision"] = sample_P
-            element["sample_perplexity"] = sample_perplexity
-            element["sample_Precision1"] = result_masked_topk["P_AT_1"]
+                sample = samples_b[idx]
 
-            # print()
-            # print("idx: {}".format(idx))
-            # print("masked_entity: {}".format(result_masked_topk['masked_entity']))
-            # for yi in range(10):
-            #     print("\t{} {}".format(yi,result_masked_topk['topk'][yi]))
-            # print("masked_indices_list: {}".format(masked_indices_list[idx]))
-            # print("sample_MRR: {}".format(sample_MRR))
-            # print("sample_P: {}".format(sample_P))
-            # print("sample: {}".format(sample))
-            # print()
+                element = {}
+                element["sample"] = sample
+                element["uuid"] = sample["uuid"]
+                element["token_ids"] = token_ids_list[idx]
+                element["masked_indices"] = masked_indices_list[idx]
+                element["label_index"] = label_index_list[idx]
+                element["masked_topk"] = result_masked_topk
+                element["sample_MRR"] = sample_MRR
+                element["sample_Precision"] = sample_P
+                element["sample_perplexity"] = sample_perplexity
+                element["sample_Precision1"] = result_masked_topk["P_AT_1"]
 
-            MRR += sample_MRR
-            Precision += sample_P
-            Precision1 += element["sample_Precision1"]
-            P1_li.append(element["sample_Precision1"])
+                # print()
+                # print("idx: {}".format(idx))
+                # print("masked_entity: {}".format(result_masked_topk['masked_entity']))
+                # for yi in range(10):
+                #     print("\t{} {}".format(yi,result_masked_topk['topk'][yi]))
+                # print("masked_indices_list: {}".format(masked_indices_list[idx]))
+                # print("sample_MRR: {}".format(sample_MRR))
+                # print("sample_P: {}".format(sample_P))
+                # print("sample: {}".format(sample))
+                # print()
 
-            '''
-            if element["sample_Precision1"] == 1:
-                print(element["sample"])
-                input(1)
-            else:
-                print(element["sample"])
-                input(0)
-            '''
+                MRR[temp_id] += sample_MRR
+                Precision[temp_id] += sample_P
+                Precision1[temp_id] += element["sample_Precision1"]
+                P1_li[temp_id].append(element["sample_Precision1"])
 
-            # the judgment of the annotators recording whether they are
-            # evidence in the sentence that indicates a relation between two entities.
-            num_yes = 0
-            num_no = 0
-
-            if "judgments" in sample:
-                # only for Google-RE
-                for x in sample["judgments"]:
-                    if x["judgment"] == "yes":
-                        num_yes += 1
-                    else:
-                        num_no += 1
-                if num_no >= num_yes:
-                    samples_with_negative_judgement += 1
-                    element["judgement"] = "negative"
-                    MRR_negative += sample_MRR
-                    Precision_negative += sample_P
+                '''
+                if element["sample_Precision1"] == 1:
+                    print(element["sample"])
+                    input(1)
                 else:
-                    samples_with_positive_judgement += 1
-                    element["judgement"] = "positive"
-                    MRR_positive += sample_MRR
-                    Precision_positivie += sample_P
+                    print(element["sample"])
+                    input(0)
+                '''
 
-            list_of_results.append(element)
+                # the judgment of the annotators recording whether they are
+                # evidence in the sentence that indicates a relation between two entities.
+                num_yes = 0
+                num_no = 0
+
+                if "judgments" in sample:
+                    # only for Google-RE
+                    for x in sample["judgments"]:
+                        if x["judgment"] == "yes":
+                            num_yes += 1
+                        else:
+                            num_no += 1
+                    if num_no >= num_yes:
+                        samples_with_negative_judgement[temp_id] += 1
+                        element["judgement"] = "negative"
+                        MRR_negative[temp_id] += sample_MRR
+                        Precision_negative[temp_id] += sample_P
+                    else:
+                        samples_with_positive_judgement[temp_id] += 1
+                        element["judgement"] = "positive"
+                        MRR_positive[temp_id] += sample_MRR
+                        Precision_positivie[temp_id] += sample_P
+
+                list_of_results[temp_id].append(element)
 
     if temp_model is not None:
         if temp_model[1] == 'precompute':
@@ -923,53 +949,55 @@ def main(args,
     pool.close()
     pool.join()
 
-    # stats
-    # Mean reciprocal rank
-    MRR /= len(list_of_results)
+    for temp_id in range(len(P1_li)):
+        # stats
+        # Mean reciprocal rank
+        MRR[temp_id] /= len(list_of_results[temp_id])
 
-    # Precision
-    Precision /= len(list_of_results)
-    Precision1 /= len(list_of_results)
+        # Precision
+        Precision[temp_id] /= len(list_of_results[temp_id])
+        Precision1[temp_id] /= len(list_of_results[temp_id])
 
-    msg = "all_samples: {}\n".format(len(all_samples))
-    msg += "list_of_results: {}\n".format(len(list_of_results))
-    msg += "global MRR: {}\n".format(MRR)
-    msg += "global Precision at 10: {}\n".format(Precision)
-    msg += "global Precision at 1: {}\n".format(Precision1)
+        msg = "all_samples: {}\n".format(len(all_samples))
+        msg += "list_of_results: {}\n".format(len(list_of_results[temp_id]))
+        msg += "global MRR: {}\n".format(MRR[temp_id])
+        msg += "global Precision at 10: {}\n".format(Precision[temp_id])
+        msg += "global Precision at 1: {}\n".format(Precision1[temp_id])
 
-    if samples_with_negative_judgement > 0 and samples_with_positive_judgement > 0:
-        # Google-RE specific
-        MRR_negative /= samples_with_negative_judgement
-        MRR_positive /= samples_with_positive_judgement
-        Precision_negative /= samples_with_negative_judgement
-        Precision_positivie /= samples_with_positive_judgement
-        msg += "samples_with_negative_judgement: {}\n".format(
-            samples_with_negative_judgement
+        if samples_with_negative_judgement[temp_id] > 0 and samples_with_positive_judgement[temp_id] > 0:
+            # Google-RE specific
+            MRR_negative[temp_id] /= samples_with_negative_judgement[temp_id]
+            MRR_positive[temp_id] /= samples_with_positive_judgement[temp_id]
+            Precision_negative[temp_id] /= samples_with_negative_judgement[temp_id]
+            Precision_positivie[temp_id] /= samples_with_positive_judgement[temp_id]
+            msg += "samples_with_negative_judgement: {}\n".format(
+                samples_with_negative_judgement[temp_id]
+            )
+            msg += "samples_with_positive_judgement: {}\n".format(
+                samples_with_positive_judgement[temp_id]
+            )
+            msg += "MRR_negative: {}\n".format(MRR_negative[temp_id])
+            msg += "MRR_positive: {}\n".format(MRR_positive[temp_id])
+            msg += "Precision_negative: {}\n".format(Precision_negative[temp_id])
+            msg += "Precision_positivie: {}\n".format(Precision_positivie[temp_id])
+
+        logger.info("\n" + msg + "\n")
+        print("\n" + msg + "\n")
+
+        # dump pickle with the result of the experiment
+        all_results = dict(
+            list_of_results=list_of_results[temp_id], global_MRR=MRR, global_P_at_10=Precision
         )
-        msg += "samples_with_positive_judgement: {}\n".format(
-            samples_with_positive_judgement
-        )
-        msg += "MRR_negative: {}\n".format(MRR_negative)
-        msg += "MRR_positive: {}\n".format(MRR_positive)
-        msg += "Precision_negative: {}\n".format(Precision_negative)
-        msg += "Precision_positivie: {}\n".format(Precision_positivie)
+        with open("{}/result.pkl".format(log_directory), "wb") as f:
+            pickle.dump(all_results, f)
 
-    logger.info("\n" + msg + "\n")
-    print("\n" + msg + "\n")
+        print('P1all {}'.format('\t'.join(map(str, P1_li[temp_id]))))
 
-    # dump pickle with the result of the experiment
-    all_results = dict(
-        list_of_results=list_of_results, global_MRR=MRR, global_P_at_10=Precision
-    )
-    with open("{}/result.pkl".format(log_directory), "wb") as f:
-        pickle.dump(all_results, f)
-
-    print('P1all {}'.format('\t'.join(map(str, P1_li))))
     print('meaning: {}'.format(c_inc_meaning))
     print('correct-incorrect {}'.format(
         '\t'.join(map(str, (c_inc_stat[:, :-1] / (c_inc_stat[:, -1:] + 1e-5)).reshape(-1)))))
 
-    return Precision1
+    return Precision1[-1]
 
 
 def replace_list(li, from_ele, to_ele):

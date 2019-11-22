@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
-lm=bert_base
-raw_temp_dir=$1
-raw_temp_socre_dir=$2
-raw_temp_socre_dir_train=$3
-sort_temp_dir=$4
+lm=$1
+raw_temp_dir=$2
+raw_temp_socre_dir=$3
+raw_temp_socre_dir_train=$4
+sort_temp_dir=$5
 sort_temp_dir_nom=${sort_temp_dir}_nomanual
-sort_temp_score_dir=$5
+sort_temp_score_dir=$6
 sort_temp_score_dir_nom=${sort_temp_score_dir}_nomanual
 top_rel=30
 
@@ -58,6 +58,23 @@ get_temp_ensemble_score() {
     done
 }
 
+get_temp_ensemble_score_all() {
+    mkdir -p ${3}${4}all
+    for file in ${1}/*; do
+        bfile=$(basename "${file}")
+        echo ${bfile}
+        python scripts/run_experiments.py \
+            --lm_model ${lm} \
+            --rel_file ${1}/${bfile} \
+            --prefix ${2} \
+            --suffix .jsonl \
+            --top ${4} \
+            --ensemble \
+            --dynamic all_topk \
+            --batch_size 32 > ${3}${4}all/${bfile}.out 2>&1
+    done
+}
+
 get_temp_ensemble_dynamic_score() {
     outdir=${3}${4}_$(echo "${5}" | sed -r 's/_//g')
     mkdir -p ${outdir}
@@ -78,9 +95,9 @@ get_temp_ensemble_dynamic_score() {
 }
 
 # refine templates
-if [ $# -gt 5 ]; then
-    refine_temp_dir=$6
-    refine_temp_score_dir=$7
+if [ $# -gt 6 ]; then
+    refine_temp_dir=$7
+    refine_temp_score_dir=$8
     refine_temp ${raw_temp_dir} data/TREx_train/ ${refine_temp_dir} ${refine_temp_score_dir}
     raw_temp_dir=${refine_temp_dir}
 fi
@@ -106,6 +123,17 @@ for file in data/TREx/*; do
     fi
 done
 
+# top 10 avg
+get_temp_ensemble_score_all ${sort_temp_dir} data/TREx/ ${sort_temp_score_dir} 10 &
+get_temp_ensemble_score_all ${sort_temp_dir_nom} data/TREx/ ${sort_temp_score_dir_nom} 10 &
+wait
+
+# all avg
+get_temp_ensemble_score ${sort_temp_dir} data/TREx/ ${sort_temp_score_dir} 10000 &
+get_temp_ensemble_score ${sort_temp_dir_nom} data/TREx/ ${sort_temp_score_dir_nom} 10000 &
+wait
+
+: '
 # evaluate using the top k templates
 for top in 1 2 3 4 5 6 7 8 9 10 10000
 do
@@ -113,6 +141,7 @@ do
     get_temp_ensemble_score ${sort_temp_dir_nom} data/TREx/ ${sort_temp_score_dir_nom} ${top} &
     wait
 done
+'
 
 : '
 wait
