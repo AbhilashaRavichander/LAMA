@@ -47,12 +47,19 @@ def load_out_file(args):
                     objs = objs[1:len(objs):2]
         subjs = np.array(subjs)
         objs = np.array(objs)
+    first_p, first_temp = [args.exclude_first] * 2
     with open(args.inp, 'r') as fin:
         for l in fin:
             l = l.strip()
             if l.startswith('P1all '):
+                if first_p:
+                    first_p = False
+                    continue
                 stat.append(list(map(float, l.split(' ')[1].split('\t'))))
             elif l.startswith('{') and l.endswith('}'):
+                if first_temp:
+                    first_temp = False
+                    continue
                 templates.append(eval(l)['template'])
     return np.array(templates), np.array(stat), subjs, objs
 
@@ -488,12 +495,33 @@ def bt_filter(args):
             print('{} has {} temps'.format(rel, len(temps)))
 
 
+def sub_obj(args):
+    subs_li, objs_li, obj_ent_li = [], [], []
+    for root, dirs, files in os.walk(args.inp):
+        for file in files:
+            subs, objs = defaultdict(lambda: 0), defaultdict(lambda: 0)
+            with open(os.path.join(root, file), 'r') as fin:
+                for l in fin:
+                    sub = json.loads(l)['sub_label']
+                    obj = json.loads(l)['obj_label']
+                    subs[sub] += 1
+                    objs[obj] += 1
+            counts = np.array(list(objs.values()))
+            counts = counts / np.sum(counts)
+            obj_entropy = scipy.stats.entropy(counts)
+            subs_li.append(len(subs))
+            objs_li.append(len(objs))
+            obj_ent_li.append(obj_entropy)
+            print(file, len(subs), len(objs), obj_entropy, sorted(objs.items(), key=lambda x: -x[1])[0])
+    print(np.mean(subs_li), np.mean(objs_li), np.mean(obj_ent_li))
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='analyze output log')
     parser.add_argument('--task', type=str, help='task', required=True, 
         choices=['out', 'wikidata', 'sort', 'major_class', 'get_train_data',
                  'get_ppdb', 'case', 'merge_all_rel', 'split_dev', 'weight_ana',
-                 'out_ana_opti', 'bt_filter', 'case_study', 'out_all_ana'])
+                 'out_ana_opti', 'bt_filter', 'case_study', 'out_all_ana', 'sub_obj'])
     parser.add_argument('--inp', type=str, help='input file')
     parser.add_argument('--obj_file', type=str, help='obj file', default=None)
     parser.add_argument('--out', type=str, help='output file')
@@ -530,3 +558,5 @@ if __name__ == '__main__':
         bt_filter(args)
     elif args.task == 'case_study':
         case_study(args)
+    elif args.task == 'sub_obj':
+        sub_obj(args)
