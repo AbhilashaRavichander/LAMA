@@ -531,6 +531,7 @@ def pairwise_distance(output_dir, args):
     all_rels_pred_scores = []
     avg_edit = 0.0
     count = 0
+    out_file = open(output_dir.split('/')[1] + '.tsv', 'w', encoding='utf-8')
     for filename in os.listdir(output_dir):
         if filename.endswith('.out'):
             args.inp = os.path.join(output_dir, filename)
@@ -556,6 +557,14 @@ def pairwise_distance(output_dir, args):
                 pred_l1_score = calc_l1_distance(all_preds[pair[0]], all_preds[pair[1]]) / len(all_preds[pair[0]])
                 template_scores.append(temp_edit_score)
                 pred_scores.append(pred_l1_score)
+
+                pred_temp_ratio = pred_l1_score / temp_edit_score
+                out_file.write('\t'.join((relation_type, pair[0], pair[1], str(pred_temp_ratio))) + '\n')
+            # normalize temp edit distance
+            min_ = min(template_scores)
+            max_ = max(template_scores)
+            template_scores = [(s - min_) / (max_ - min_) for s in template_scores]
+
             print(relation_type, pearsonr(template_scores, pred_scores)[0])
             all_rels_temp_scores += template_scores
             all_rels_pred_scores += pred_scores
