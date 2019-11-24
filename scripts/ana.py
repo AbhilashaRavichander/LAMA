@@ -10,7 +10,12 @@ from tqdm import tqdm
 import urllib.request
 import urllib.parse
 import time
+import itertools
 from subprocess import Popen, PIPE
+from fuzzywuzzy import fuzz
+from scipy.stats import pearsonr
+import nltk
+import matplotlib.pyplot as plt
 
 
 def load_file(filename):
@@ -515,13 +520,67 @@ def sub_obj(args):
             print(file, len(subs), len(objs), obj_entropy, sorted(objs.items(), key=lambda x: -x[1])[0])
     print(np.mean(subs_li), np.mean(objs_li), np.mean(obj_ent_li))
 
+def pairwise_distance(output_dir, args):
+    all_rels_temp_scores = []
+    all_rels_pred_scores = []
+    for filename in os.listdir(output_dir):
+        if filename.endswith('.out'):
+            args.inp = os.path.join(output_dir, filename)
+            templates, stat, subjs, objs = load_out_file(args)
+            all_preds = {}
+            if len(templates) != len(stat):
+                continue
+            print(filename.split('.')[0])
+            for template, pred in zip(templates, stat):
+                pred_str = [str(int(x)) for x in pred]
+                normalized_template = ' '.join(nltk.word_tokenize(template[0].replace('[X]', 'X').replace('[Y]', 'Y')))
+                all_preds[normalized_template] = ''.join(pred_str)
+            pairwise_templates = itertools.combinations(all_preds.keys(), 2)
+            template_scores = []
+            pred_scores = []
+            for pair in pairwise_templates:
+                temp_edit_score = fuzz.ratio(pair[0].split(), pair[1].split()) / 100
+                pred_edit_score = fuzz.ratio(all_preds[pair[0]], all_preds[pair[1]]) / 100
+                template_scores.append(temp_edit_score)
+                pred_scores.append(pred_edit_score)
+            print(pearsonr(template_scores, pred_scores))
+            all_rels_temp_scores += template_scores
+            all_rels_pred_scores += pred_scores
+    print("Overall: ", pearsonr(all_rels_temp_scores, all_rels_pred_scores))
+    return all_rels_temp_scores, all_rels_pred_scores
+
+
+def template_div(args):
+    print('processing mined')
+    mined_dir = 'output/exp_allpids_top30/trex/'
+    mined_all_rels_temp_scores, mined_all_rels_pred_scores = pairwise_distance(mined_dir, args)
+    print('processing paraphrase')
+    para_dir = 'output/exp_mt_7/trex/'
+    para_all_rels_temp_scores, para_all_rels_pred_scores = pairwise_distance(para_dir, args)
+
+    print('Overall Pearson:')
+    print(pearsonr(mined_all_rels_temp_scores + para_all_rels_temp_scores,
+                   mined_all_rels_pred_scores + para_all_rels_pred_scores))
+
+    fig, ax = plt.subplots()
+    ax.set_xlabel('template similarity')
+    ax.set_ylabel('prediction similarity')
+
+    ax.scatter(mined_all_rels_temp_scores, mined_all_rels_pred_scores, c='blue', label='mined',
+               alpha=0.3, edgecolors='none')
+    ax.scatter(para_all_rels_temp_scores, para_all_rels_pred_scores, c='red', label='paraphrase',
+               alpha=0.3, edgecolors='none')
+    ax.legend()
+    ax.grid(True)
+    plt.savefig('correlation_template_div.png')
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='analyze output log')
     parser.add_argument('--task', type=str, help='task', required=True, 
         choices=['out', 'wikidata', 'sort', 'major_class', 'get_train_data',
                  'get_ppdb', 'case', 'merge_all_rel', 'split_dev', 'weight_ana',
-                 'out_ana_opti', 'bt_filter', 'case_study', 'out_all_ana', 'sub_obj'])
+                 'out_ana_opti', 'bt_filter', 'case_study', 'out_all_ana', 'sub_obj', 'template_divergence'])
     parser.add_argument('--inp', type=str, help='input file')
     parser.add_argument('--obj_file', type=str, help='obj file', default=None)
     parser.add_argument('--out', type=str, help='output file')
@@ -560,3 +619,5 @@ if __name__ == '__main__':
         case_study(args)
     elif args.task == 'sub_obj':
         sub_obj(args)
+    elif args.task == 'template_divergence':
+        template_div(args)
