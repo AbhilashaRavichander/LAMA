@@ -615,6 +615,17 @@ def subj_obj_distance_analysis(args):
     para_all_rels_length_scores, para_all_rels_accuracy_scores = subj_obj_distance_calc(para_dir, args)
     print('Overall', pearsonr(para_all_rels_length_scores, para_all_rels_accuracy_scores)[0])
 
+    fig, ax = plt.subplots()
+    ax.set_xlabel('subj-obj distance')
+    ax.set_ylabel('accuracy')
+
+    ax.scatter(mined_all_rels_length_scores, mined_all_rels_accuracy_scores, c='blue', label='mined',
+               alpha=0.3, edgecolors='none')
+    ax.scatter(para_all_rels_length_scores, para_all_rels_accuracy_scores, c='red', label='paraphrase',
+               alpha=0.3, edgecolors='none')
+    ax.legend()
+    ax.grid(True)
+    plt.savefig('distance_accuracy.png')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='analyze output log')
