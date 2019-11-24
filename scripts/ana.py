@@ -16,6 +16,7 @@ from fuzzywuzzy import fuzz
 from scipy.stats import pearsonr
 import nltk
 import matplotlib.pyplot as plt
+import pandas as pd
 
 
 def load_file(filename):
@@ -572,6 +573,7 @@ def pairwise_distance(output_dir, args):
     return all_rels_temp_scores, all_rels_pred_scores
 
 
+
 def template_div(args):
     print('processing mined')
     mined_dir = 'output/exp_allpids_top30/trex/'
@@ -583,17 +585,39 @@ def template_div(args):
     para_all_rels_temp_scores, para_all_rels_pred_scores = pairwise_distance(para_dir, args)
     print('Overall', pearsonr(para_all_rels_temp_scores, para_all_rels_pred_scores)[0])
 
-    fig, ax = plt.subplots()
-    ax.set_xlabel('template similarity')
-    ax.set_ylabel('prediction similarity')
+    print('plot mined')
+    mined_df = pd.DataFrame({'temp': mined_all_rels_temp_scores,
+                             'pred': mined_all_rels_pred_scores})
+    mined_df['temp_bins'] = pd.cut(x=mined_df['temp'], bins=[-1, 0.2, 0.4, 0.6, 0.8, 1.0],
+                                   labels=['[0.0, 0.2]', '(0.2, 0.4]', '(0.4, 0.6]', '(0.6, 0.8]', '(0.8, 1.0]'])
+    plt.rcParams.update({'font.size': 14})
 
-    ax.scatter(mined_all_rels_temp_scores, mined_all_rels_pred_scores, c='blue', label='mined',
-               alpha=0.3, edgecolors='none')
-    ax.scatter(para_all_rels_temp_scores, para_all_rels_pred_scores, c='red', label='paraphrase',
-               alpha=0.3, edgecolors='none')
-    ax.legend()
-    ax.grid(True)
+    boxplot = mined_df.boxplot(column='pred', by='temp_bins', showfliers=False, vert=True, showmeans=True,
+                               boxprops=dict(linewidth=2),
+                               flierprops=dict(linewidth=2),
+                               medianprops=dict(linewidth=2),
+                               whiskerprops=dict(linewidth=2),
+                               capprops=dict(linewidth=2),
+                               )
+    boxplot.set_xlabel('bucketed normalized edit distance between mined prompts')
+    boxplot.set_ylabel('prediction divergence')
+    plt.suptitle("")
+    plt.title("")
+
+    # fig, ax = plt.subplots()
+    # ax.set_xlabel('template distance')
+    # ax.set_ylabel('prediction divergence')
+    #
+    # # ax.scatter(mined_all_rels_temp_scores, mined_all_rels_pred_scores, c='blue', label='mined',
+    # #            alpha=0.3, edgecolors='none')
+    # # ax.scatter(para_all_rels_temp_scores, para_all_rels_pred_scores, c='red', label='paraphrase',
+    # #            alpha=0.3, edgecolors='none')
+    #
+    # ax.legend()
+    # ax.grid(True)
     plt.savefig('correlation_template_div.png')
+    plt.savefig('correlation_template_div.eps', format='eps')
+
 
 def subj_obj_distance_calc(output_dir, args):
     all_rels_length_scores = []
