@@ -520,9 +520,17 @@ def sub_obj(args):
             print(file, len(subs), len(objs), obj_entropy, sorted(objs.items(), key=lambda x: -x[1])[0])
     print(np.mean(subs_li), np.mean(objs_li), np.mean(obj_ent_li))
 
+def calc_l1_distance(list1, list2):
+    dist = 0
+    for x, y in zip(list1, list2):
+        dist += abs(x - y)
+    return dist
+
 def pairwise_distance(output_dir, args):
     all_rels_temp_scores = []
     all_rels_pred_scores = []
+    avg_edit = 0.0
+    count = 0
     for filename in os.listdir(output_dir):
         if filename.endswith('.out'):
             args.inp = os.path.join(output_dir, filename)
@@ -532,23 +540,26 @@ def pairwise_distance(output_dir, args):
                 continue
             relation_type = filename.split('.')[0]
             for template, pred in zip(templates, stat):
-                pred_str = [str(int(x)) for x in pred]
+                preds = [int(x) for x in pred]
                 tokens = nltk.word_tokenize(template[0])
                 # [X] -> [ X ]
                 tokens = [t for t in tokens if t not in ('[', ']')]
                 normalized_template = ' '.join(tokens)
-                all_preds[normalized_template] = ''.join(pred_str)
+                all_preds[normalized_template] = preds
             pairwise_templates = itertools.combinations(all_preds.keys(), 2)
             template_scores = []
             pred_scores = []
             for pair in pairwise_templates:
-                temp_edit_score = fuzz.ratio(pair[0].split(), pair[1].split()) / 100
-                pred_edit_score = fuzz.ratio(all_preds[pair[0]], all_preds[pair[1]]) / 100
+                temp_edit_score = nltk.edit_distance(pair[0].split(), pair[1].split())
+                avg_edit += temp_edit_score
+                count += 1
+                pred_l1_score = calc_l1_distance(all_preds[pair[0]], all_preds[pair[1]]) / len(all_preds[pair[0]])
                 template_scores.append(temp_edit_score)
-                pred_scores.append(pred_edit_score)
+                pred_scores.append(pred_l1_score)
             print(relation_type, pearsonr(template_scores, pred_scores)[0])
             all_rels_temp_scores += template_scores
             all_rels_pred_scores += pred_scores
+    print('Avg edit: ', avg_edit / count)
     return all_rels_temp_scores, all_rels_pred_scores
 
 
@@ -585,8 +596,13 @@ def subj_obj_distance_calc(output_dir, args):
             if len(templates) != len(stat):
                 continue
             relation_type = filename.split('.')[0]
+            if relation_type == 'P190':
+                # constant
+                continue
             length_scores = []
             accuracy_scores = []
+            min_length = 0
+            max_length = 1000
             for template, pred in zip(templates, stat):
                 pred = [int(x) for x in pred]
                 acc = sum(pred) / len(pred)
@@ -595,9 +611,15 @@ def subj_obj_distance_calc(output_dir, args):
                 subj_idx = tokens.index('X')
                 obj_idx = tokens.index('Y')
                 distance = abs(subj_idx - obj_idx)
+                if distance > min_length:
+                    min_length = distance
+                if distance < max_length:
+                    max_length = distance
                 length_scores.append(distance)
                 accuracy_scores.append(acc)
-
+            # normalize lengths
+            for idx in range(len(length_scores)):
+                length_scores[idx] = (length_scores[idx] - min_length) / (max_length - min_length)
             print(relation_type, pearsonr(length_scores, accuracy_scores)[0])
             all_rels_length_scores += length_scores
             all_rels_accuracy_scores += accuracy_scores
