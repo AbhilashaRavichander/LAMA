@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 
-lm=bert_base
-merge_rel_file=$1
-feature_root_dir=$2
-temp=$3
-cuda1=$4
-cuda2=$5
+lm=$1
+merge_rel_file=$2
+feature_root_dir=$3
+temp=$4
+cuda1=$5
+cuda2=$6
 
-set -e
+#set -e
 
 optimize_on_the_fly() {  # only use for log features
     head_tail_dir=$1

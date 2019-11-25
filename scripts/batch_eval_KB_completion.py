@@ -794,6 +794,9 @@ def main(args,
             filter_lp_merge_expand.scatter_(-1, objs_ind, filter_lp_merge)
             filter_lp_merge = filter_lp_merge_expand + expand_mask[:, 0, :].log()  # mask out other objs
 
+        if len(filter_lp_merge.size()) == 2:
+            filter_lp_merge = filter_lp_merge.unsqueeze(1)
+
         for temp_id in range(filter_lp_merge.size(1)):
 
             arguments = [
