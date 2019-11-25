@@ -16,6 +16,7 @@ from fuzzywuzzy import fuzz
 from scipy.stats import pearsonr
 import nltk
 import matplotlib.pyplot as plt
+import pandas as pd
 
 
 def load_file(filename):
@@ -536,6 +537,7 @@ def pairwise_distance(output_dir, args):
     all_rels_pred_scores = []
     avg_edit = 0.0
     count = 0
+    out_file = open(output_dir.split('/')[1] + '.tsv', 'w', encoding='utf-8')
     for filename in os.listdir(output_dir):
         if filename.endswith('.out'):
             args.inp = os.path.join(output_dir, filename)
@@ -561,6 +563,14 @@ def pairwise_distance(output_dir, args):
                 pred_l1_score = calc_l1_distance(all_preds[pair[0]], all_preds[pair[1]]) / len(all_preds[pair[0]])
                 template_scores.append(temp_edit_score)
                 pred_scores.append(pred_l1_score)
+
+                pred_temp_ratio = pred_l1_score / temp_edit_score
+                out_file.write('\t'.join((relation_type, pair[0], pair[1], str(pred_temp_ratio))) + '\n')
+            # normalize temp edit distance
+            min_ = min(template_scores)
+            max_ = max(template_scores)
+            template_scores = [(s - min_) / (max_ - min_) for s in template_scores]
+
             print(relation_type, pearsonr(template_scores, pred_scores)[0])
             all_rels_temp_scores += template_scores
             all_rels_pred_scores += pred_scores
@@ -618,6 +628,7 @@ def rank_edit(args):
     mined_dir = 'output/exp_mt_7/trex/'
     rank_by_pairwsie_distance(mined_dir, args)
 
+
 def template_div(args):
     print('processing mined')
     mined_dir = 'output/exp_allpids_top30/trex/'
@@ -629,17 +640,29 @@ def template_div(args):
     para_all_rels_temp_scores, para_all_rels_pred_scores = pairwise_distance(para_dir, args)
     print('Overall', pearsonr(para_all_rels_temp_scores, para_all_rels_pred_scores)[0])
 
-    fig, ax = plt.subplots()
-    ax.set_xlabel('template similarity')
-    ax.set_ylabel('prediction similarity')
+    print('plot mined')
+    mined_df = pd.DataFrame({'temp': mined_all_rels_temp_scores,
+                             'pred': mined_all_rels_pred_scores})
+    mined_df['temp_bins'] = pd.cut(x=mined_df['temp'], bins=[-1, 0.2, 0.4, 0.6, 0.8, 1.0],
+                                   labels=['[0.0, 0.2]', '(0.2, 0.4]', '(0.4, 0.6]', '(0.6, 0.8]', '(0.8, 1.0]'])
+    plt.rcParams.update({'font.size': 14})
 
-    ax.scatter(mined_all_rels_temp_scores, mined_all_rels_pred_scores, c='blue', label='mined',
-               alpha=0.3, edgecolors='none')
-    ax.scatter(para_all_rels_temp_scores, para_all_rels_pred_scores, c='red', label='paraphrase',
-               alpha=0.3, edgecolors='none')
-    ax.legend()
-    ax.grid(True)
+    boxplot = mined_df.boxplot(column='pred', by='temp_bins', showfliers=False, vert=True, showmeans=True,
+                               boxprops=dict(linewidth=2),
+                               flierprops=dict(linewidth=2),
+                               medianprops=dict(linewidth=2),
+                               whiskerprops=dict(linewidth=2),
+                               capprops=dict(linewidth=2),
+                               )
+    boxplot.set_xlabel('bucketed normalized edit distance between mined prompts', labelpad=10)
+    boxplot.set_ylabel('prediction divergence', labelpad=10)
+    plt.suptitle("")
+    plt.title("")
+    plt.tight_layout()
+
     plt.savefig('correlation_template_div.png')
+    plt.savefig('correlation_template_div.eps', format='eps')
+
 
 def subj_obj_distance_calc(output_dir, args):
     all_rels_length_scores = []
