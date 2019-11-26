@@ -75,12 +75,19 @@ def case_study(args):
     best_ind = np.argmax(stat.mean(-1))
     print('manual {}'.format(templates[0]))
     print('best {} {}'.format(best_ind, templates[best_ind]))
-    cases_ind = (stat[best_ind] - stat[0]) > 0
-    cases = np.array(list(zip(subjs[cases_ind], objs[cases_ind])))
-    print('#cases {}'.format(len(cases)))
-    show = np.random.permutation(len(cases))[:10]
-    show = list(range(10))
-    print(cases[show])
+    for ind in range(len(templates)):
+        cases_ind = (stat[ind] - stat[0]) > 0
+        cases = np.array(list(zip(subjs[cases_ind], objs[cases_ind])))
+        if len(cases) > 0:
+            print('{} {}'.format(ind, templates[ind]))
+            print('#cases {}'.format(len(cases)))
+            #show = np.random.permutation(len(cases))[:10]
+            show = list(range(10))[:len(cases)]
+            print(cases[show])
+            input()
+        else:
+            print('{} {}'.format(ind, templates[ind]))
+            print('#cases {}'.format(len(cases)))
 
 
 def out_ana(args):
