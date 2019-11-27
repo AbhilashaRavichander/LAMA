@@ -76,12 +76,19 @@ def case_study(args):
     best_ind = np.argmax(stat.mean(-1))
     print('manual {}'.format(templates[0]))
     print('best {} {}'.format(best_ind, templates[best_ind]))
-    cases_ind = (stat[best_ind] - stat[0]) > 0
-    cases = np.array(list(zip(subjs[cases_ind], objs[cases_ind])))
-    print('#cases {}'.format(len(cases)))
-    show = np.random.permutation(len(cases))[:10]
-    show = list(range(10))
-    print(cases[show])
+    for ind in range(len(templates)):
+        cases_ind = (stat[ind] - stat[0]) > 0
+        cases = np.array(list(zip(subjs[cases_ind], objs[cases_ind])))
+        if len(cases) > 0:
+            print('{} {}'.format(ind, templates[ind]))
+            print('#cases {}'.format(len(cases)))
+            #show = np.random.permutation(len(cases))[:10]
+            show = list(range(10))[:len(cases)]
+            print(cases[show])
+            input()
+        else:
+            print('{} {}'.format(ind, templates[ind]))
+            print('#cases {}'.format(len(cases)))
 
 
 def out_ana(args):
@@ -397,6 +404,11 @@ def merge_all_rel(args, top=None):
                         temps = temps[:top]
                     if args.exclude_first:  # remove the manual template
                         temps = temps[1:]
+                    if len(temps) == 0:
+                        print('{} is empty'.format(rel_name))
+                        continue
+                    else:
+                        print('{} {}'.format(rel_name, len(temps)))
                     rel_li[0]['template'] = temps
                 fout.write(json.dumps(rel_li[0]) + '\n')
 
@@ -573,6 +585,56 @@ def pairwise_distance(output_dir, args):
     print('Avg edit: ', avg_edit / count)
     return all_rels_temp_scores, all_rels_pred_scores
 
+def rank_by_pairwsie_distance(output_dir, args):
+    all_rels_pairs = []
+    all_rels_temp_scores = []
+    all_rels_pred_scores = []
+    for filename in os.listdir(output_dir):
+        if filename.endswith('.out'):
+            args.inp = os.path.join(output_dir, filename)
+            templates, stat, subjs, objs = load_out_file(args)
+            all_preds = {}
+            if len(templates) != len(stat):
+                continue
+            relation_type = filename.split('.')[0]
+
+            new_temps = []
+            for template, pred in zip(templates, stat):
+                preds = [int(x) for x in pred]
+                tokens = nltk.word_tokenize(template[0])
+                # [X] -> [ X ]
+                tokens = [t for t in tokens if t not in ('[', ']')]
+                normalized_template = ' '.join(tokens)
+                all_preds[normalized_template] = preds
+                new_temps.append(normalized_template)
+
+            pairs = []
+            template_scores = []
+            pred_scores = []
+            for temp in new_temps[1:]:
+                pair = (new_temps[0], temp)
+                temp_edit_score = nltk.edit_distance(pair[0].split(), pair[1].split())
+                if temp_edit_score != 1:
+                    continue
+                temp_edit_score = temp_edit_score / (len(pair[0].split()) + len(pair[1].split()))
+                pred_l1_score = np.mean(all_preds[pair[1]]) - np.mean(all_preds[pair[0]])
+                pairs.append((relation_type, pair))
+                template_scores.append(temp_edit_score)
+                pred_scores.append(pred_l1_score)
+
+            all_rels_pairs += pairs
+            all_rels_temp_scores += template_scores
+            all_rels_pred_scores += pred_scores
+
+    for temp_dist, pred_dist, pair in sorted(zip(all_rels_temp_scores, all_rels_pred_scores, all_rels_pairs), key=lambda x: (-x[1]/x[0])):
+        print(pair, temp_dist, pred_dist)
+        input()
+
+    return all_rels_temp_scores, all_rels_pred_scores
+
+def rank_edit(args):
+    mined_dir = 'output/exp_mt_7/trex/'
+    rank_by_pairwsie_distance(mined_dir, args)
 
 
 def template_div(args):
@@ -796,7 +858,7 @@ if __name__ == '__main__':
         choices=['out', 'wikidata', 'sort', 'major_class', 'get_train_data',
                  'get_ppdb', 'case', 'merge_all_rel', 'split_dev', 'weight_ana',
                  'out_ana_opti', 'bt_filter', 'case_study', 'out_all_ana', 'sub_obj',
-                 'template_divergence', 'subj_obj_distance', 'pos_tag_ana'])
+                 'template_divergence', 'subj_obj_distance', 'pos_tag_ana', 'rank_edit'])
     parser.add_argument('--inp', type=str, help='input file')
     parser.add_argument('--obj_file', type=str, help='obj file', default=None)
     parser.add_argument('--out', type=str, help='output file')
@@ -839,6 +901,8 @@ if __name__ == '__main__':
         template_div(args)
     elif args.task == 'subj_obj_distance':
         subj_obj_distance_analysis(args)
+    elif args.task == 'rank_edit':
+        rank_edit(args)
     elif args.task == 'pos_tag_ana':
         pos_tag_ana(args)
 

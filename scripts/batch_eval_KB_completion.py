@@ -306,6 +306,7 @@ def filter_samples(model, samples, vocab_subset, max_sentence_length, template):
 def main(args,
          shuffle_data=True,
          model=None,
+         model2=None,
          refine_template=False,
          get_objs=False,
          dynamic='none',
@@ -507,6 +508,7 @@ def main(args,
 
     loss_list = []
     features_list = []
+    features_list2 = []
     bt_features_list = []
     label_index_tensor_list = []
 
@@ -516,6 +518,7 @@ def main(args,
         sentences_b_all = sentences_batches_li[i]
 
         filter_lp_merge = None
+        filter_lp_merge2 = None
         samples_b = samples_b_all[-1]
         max_score = float('-inf')
         consist_score_li = []
@@ -529,9 +532,14 @@ def main(args,
             # TODO: add tokens_tensor and mask_tensor for more models
             original_log_probs_list, token_ids_list, masked_indices_list, tokens_tensor, mask_tensor = \
                 model.get_batch_generation(sentences_b, logger=logger)
+            if model2 is not None:
+                original_log_probs_list2, token_ids_list2, masked_indices_list2, tokens_tensor2, mask_tensor2 = \
+                    model2.get_batch_generation(sentences_b, logger=logger)
 
             if use_prob:  # use prob instead of log prob
                 original_log_probs_list = original_log_probs_list.exp()
+                if model2 is not None:
+                    original_log_probs_list2 = original_log_probs_list2.exp()
 
             if dynamic == 'real_lm' or dynamic.startswith('real_lm_topk'):
                 sentences_b_mask_rel = [s['tokenized_sentences'][0] for s in samples_b_this]
@@ -564,9 +572,16 @@ def main(args,
                 filtered_log_probs_list = [
                     flp[masked_indices_list[ind][0]].index_select(dim=-1, index=filter_logprob_indices)
                     for ind, flp in enumerate(original_log_probs_list)]
+                if model2 is not None:
+                    filtered_log_probs_list2 = [
+                        flp[masked_indices_list2[ind][0]].index_select(dim=-1, index=filter_logprob_indices)
+                        for ind, flp in enumerate(original_log_probs_list2)]
             else:
                 filtered_log_probs_list = [flp[masked_indices_list[ind][0]] for ind, flp in
                                            enumerate(original_log_probs_list)]
+                if model2 is not None:
+                    filtered_log_probs_list2 = [flp[masked_indices_list2[ind][0]] for ind, flp in
+                                                enumerate(original_log_probs_list2)]
 
             if dynamic.startswith('bt_topk'):
                 obj_topk = int(dynamic.rsplit('-', 1)[1])
@@ -609,6 +624,8 @@ def main(args,
             # add to overall probability
             if filter_lp_merge is None:
                 filter_lp_merge = filtered_log_probs_list
+                if model2 is not None:
+                    filter_lp_merge2 = filtered_log_probs_list2
                 if dynamic == 'lm' or dynamic == 'real_lm':
                     max_score = consist_score
                 elif dynamic.startswith('real_lm_topk') or \
@@ -634,6 +651,8 @@ def main(args,
                     consist_score_li.append(consist_score)
                 elif temp_model is not None:
                     filter_lp_merge.extend(filtered_log_probs_list)
+                    if model2 is not None:
+                        filter_lp_merge2.extend(filtered_log_probs_list2)
 
             samples_b_prev = samples_b_this
 
@@ -672,6 +691,9 @@ def main(args,
             # SHAPE: (batch_size, num_temp, filter_vocab_size)
             filter_lp_merge = torch.stack(filter_lp_merge, 0).view(
                 len(sentences_b_all), len(filter_lp_merge) // len(sentences_b_all), -1).permute(1, 0, 2)
+            if model2 is not None:
+                filter_lp_merge2 = torch.stack(filter_lp_merge2, 0).view(
+                    len(sentences_b_all), len(filter_lp_merge2) // len(sentences_b_all), -1).permute(1, 0, 2)
             # SHAPE: (batch_size)
             label_index_tensor = torch.tensor([index_list.index(li[0]) for li in label_index_list])
             c_inc = np.array(metrics.analyze_prob(
@@ -699,6 +721,8 @@ def main(args,
                     continue
             elif optimizer is not None:  # train on the fly
                 features_list.append(filter_lp_merge)  # collect features that will later be used in optimization
+                if model2 is not None:
+                    features_list2.append(filter_lp_merge2)  # collect features that will later be used in optimization
                 label_index_tensor_list.append(label_index_tensor)  # collect labels
                 if not bt_obj:
                     continue
@@ -793,6 +817,9 @@ def main(args,
             # expand results to vocab_size
             filter_lp_merge_expand.scatter_(-1, objs_ind, filter_lp_merge)
             filter_lp_merge = filter_lp_merge_expand + expand_mask[:, 0, :].log()  # mask out other objs
+
+        if len(filter_lp_merge.size()) == 2:
+            filter_lp_merge = filter_lp_merge.unsqueeze(1)
 
         for temp_id in range(filter_lp_merge.size(1)):
 
@@ -909,11 +936,12 @@ def main(args,
             temp_model_.cuda()
             # SHAPE: (batch_size, num_temp, vocab_size)
             features = torch.cat(features_list, 0)
+            if model2 is not None:
+                features2 = torch.cat(features_list2, 0)
             if bt_obj:
                 bt_features = torch.cat(bt_features_list, 0)
                 features = torch.cat([features, bt_features], 1)
             # compute weight
-            temprature = 1.0
             # SHAPE: (batch_size,)
             label_index_tensor = torch.cat(label_index_tensor_list, 0)
             label_count = torch.bincount(label_index_tensor)
@@ -930,6 +958,10 @@ def main(args,
                     label_index_tensor_b = label_index_tensor[b:b + batch_size].cuda()
                     sample_weight_b = sample_weight[b:b + batch_size].cuda()
                     loss = temp_model_(args.relation, features_b, target=label_index_tensor_b, sample_weight=sample_weight_b, use_softmax=True)
+                    if model2 is not None:
+                        features2_b = features2[b:b + batch_size].cuda()
+                        loss2 = temp_model_(args.relation, features2_b, target=label_index_tensor_b, sample_weight=sample_weight_b, use_softmax=True)
+                        loss = loss + loss2
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()

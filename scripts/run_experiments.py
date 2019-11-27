@@ -117,6 +117,7 @@ def run_experiments(
     enforce_prob=True,
     num_feat=1,
     temperature=0.0,
+    use_model2=False,
     input_param={
         "lm": "bert",
         "label": "bert_large",
@@ -125,7 +126,7 @@ def run_experiments(
         "bert_model_dir": "pre-trained_language_models/bert/cased_L-24_H-1024_A-16",
     },
 ):
-    model = None
+    model, model2 = None, None
     pp = pprint.PrettyPrinter(width=41, compact=True)
 
     all_Precision1 = []
@@ -189,17 +190,21 @@ def run_experiments(
         }
         dev_param = deepcopy(PARAMETERS)
         dev_param['dataset_filename'] = '{}/{}{}'.format(data_path_pre + '_dev', relation['relation'], data_path_post)
+        bert_large_param = deepcopy(PARAMETERS)
 
         if 'template' in relation:
             PARAMETERS['template'] = relation['template']
             dev_param['template'] = relation['template']
+            bert_large_param['template'] = relation['template']
 
         PARAMETERS.update(input_param)
         dev_param.update(input_param)
+        bert_large_param.update(LM_BERT_LARGE)  # this is used to optimize the weights for bert-base and bert-large at the same time
         print(PARAMETERS)
 
         args = argparse.Namespace(**PARAMETERS)
         dev_args = argparse.Namespace(**dev_param)
+        bert_large_args = argparse.Namespace(**bert_large_param)
 
         # see if file exists
         try:
@@ -212,6 +217,8 @@ def run_experiments(
         if model is None:
             [model_type_name] = args.models_names
             model = build_model_by_name(model_type_name, args)
+            if use_model2:
+                model2 = build_model_by_name(bert_large_args.models_names[0], bert_large_args)
 
         if temp_model is not None:
             if temp_model[1] == 'precompute':
@@ -223,7 +230,7 @@ def run_experiments(
                 continue
             elif temp_model[1] is not None:  # train temp model
                 if feature_dir is None:
-                    loss = run_evaluation(args, shuffle_data=False, model=model,
+                    loss = run_evaluation(args, shuffle_data=False, model=model, model2=model2,
                                           refine_template=bool(refine_template),
                                           get_objs=get_objs, dynamic=dynamic,
                                           use_prob=use_prob, bt_obj=bt_obj,
@@ -358,9 +365,10 @@ def get_relation_phrase_parameters(args):
     enforce_prob = args.enforce_prob
     num_feat = args.num_feat
     temperature = float(args.temperature)
+    use_model2 = args.use_model2
     return relations, data_path_pre, data_path_post, args.refine_template, \
            args.get_objs, args.batch_size, args.dynamic, args.use_prob, \
-           bt_obj, temp_model, save, load, feature_dir, enforce_prob, num_feat, temperature
+           bt_obj, temp_model, save, load, feature_dir, enforce_prob, num_feat, temperature, use_model2
 
 
 def get_test_phrase_parameters(args):
@@ -379,19 +387,20 @@ def get_test_phrase_parameters(args):
     refine_template = None  #'test.out'
     get_objs = False
     batch_size = 32
-    dynamic = 'all_topk'
+    dynamic = 'none'
     use_prob = False
     bt_obj = 0
-    temp_model = None
+    temp_model = 'mixture_optimize'
     save = None
     load = None
     feature_dir = None
     enforce_prob = False
-    num_feat = 1,
-    temperature = 1.0
+    num_feat = 1
+    temperature = 0.0
+    use_model2 = True
     return relations, data_path_pre, data_path_post, refine_template, get_objs, \
            batch_size, dynamic, use_prob, bt_obj, temp_model, save, load, feature_dir, \
-           enforce_prob, num_feat, temperature
+           enforce_prob, num_feat, temperature, use_model2
 
 
 def get_ConceptNet_parameters(data_path_pre="data/"):
@@ -453,6 +462,7 @@ if __name__ == "__main__":
     parser.add_argument('--enforce_prob', help='whether force the feature to be prob', action='store_true')
     parser.add_argument('--num_feat', type=int, help='number of features', default=1)
     parser.add_argument('--temperature', type=float, help='temperature for sample weight', default=0.0)
+    parser.add_argument('--use_model2', help='use two model in optimization', action='store_true')
     args = parser.parse_args()
     parameters = get_relation_phrase_parameters(args)
     #parameters = get_test_phrase_parameters(args)
