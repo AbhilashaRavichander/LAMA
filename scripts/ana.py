@@ -826,10 +826,10 @@ def pos_tag_ana(args):
     print("V: ", len(v_df))
     print("OTHER: ", len(other_df))
 
-    vwp_df['type'] = 'vwp'
-    vp_df['type'] = 'vp'
-    v_df['type'] = 'v'
-    other_df['type'] = 'other'
+    vwp_df['type'] = 'VW*P'
+    vp_df['type'] = 'VP'
+    v_df['type'] = 'V'
+    other_df['type'] = 'Other'
     new_df = pd.concat([vwp_df, vp_df, v_df, other_df])
     plt.rcParams.update({'font.size': 14})
 
@@ -849,7 +849,7 @@ def pos_tag_ana(args):
     plt.savefig('pos_tag_ana.png')
     plt.savefig('pos_tag_ana.eps', format='eps')
 
-    print(mined_df.groupby('tag')['rank'].describe().sort_values(by=['count']))
+    mined_df.groupby('tag')['rank'].describe().to_csv('postags_mined.csv')
 
 
 if __name__ == '__main__':
