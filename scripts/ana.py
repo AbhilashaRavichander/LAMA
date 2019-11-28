@@ -1,3 +1,4 @@
+import string
 from typing import List, Dict, Union, Any, Tuple
 import argparse
 import numpy as np
@@ -12,12 +13,12 @@ import urllib.parse
 import time
 import itertools
 from subprocess import Popen, PIPE
-from fuzzywuzzy import fuzz
 from scipy.stats import pearsonr
 import nltk
 import matplotlib.pyplot as plt
 import pandas as pd
-
+import spacy
+import re
 
 def load_file(filename):
     data = []
@@ -734,13 +735,130 @@ def subj_obj_distance_analysis(args):
     ax.grid(True)
     plt.savefig('distance_accuracy.png')
 
+def process_template_pos_tags(output_dir, args):
+    nlp = spacy.load("en_core_web_sm")
+    grammar_VWP = """VERB: {<RB>?<MD>?<V.*><RP>?<RB>?}
+                 WORD: {<$>|<PRP$>|<CD>|<DT>|<JJ>|<JJS>|<JJR>|<N.*>|<POS>|<PRP>|<RB>|<RBR>|<RBS>|<VBN>|<VBG>}
+                 PREP: {<RB>?<IN|TO|RP|><RB>?}
+                 TARGET: {<VERB><WORD>*<PREP>}
+                """
+    grammar_VP = """VERB: {<RB>?<MD>?<V.*><RP>?<RB>?}
+                 WORD: {<$>|<PRP$>|<CD>|<DT>|<JJ>|<JJS>|<JJR>|<N.*>|<POS>|<PRP>|<RB>|<RBR>|<RBS>|<VBN>|<VBG>}
+                 PREP: {<RB>?<IN|TO|RP|><RB>?}
+                 TARGET: {<VERB><PREP>}
+                """
+    grammar_V = """VERB: {<RB>?<MD>?<V.*><RP>?<RB>?}
+                 WORD: {<$>|<PRP$>|<CD>|<DT>|<JJ>|<JJS>|<JJR>|<N.*>|<POS>|<PRP>|<RB>|<RBR>|<RBS>|<VBN>|<VBG>}
+                 PREP: {<RB>?<IN|TO|RP|><RB>?}
+                 TARGET: {<VERB>}
+                """
+
+    vwp = nltk.RegexpParser(grammar_VWP)
+    vp = nltk.RegexpParser(grammar_VP)
+    v = nltk.RegexpParser(grammar_V)
+
+    def is_match(t):
+        for subtree in t.subtrees():
+            if subtree.label() == "TARGET":
+                return True
+        return False
+
+    all_res = []
+    for filename in os.listdir(output_dir):
+        if filename.endswith('.out'):
+            args.inp = os.path.join(output_dir, filename)
+            templates, stat, subjs, objs = load_out_file(args)
+            all_preds = {}
+            if len(templates) != len(stat):
+                continue
+            relation_type = filename.split('.')[0]
+            print(relation_type)
+            res = []
+            for template, pred in zip(templates, stat):
+                preds = [int(x) for x in pred]
+                acc = sum(preds) / len(preds)
+                temp = template[0].replace('[X]', 'X').replace('[Y]', 'Y')
+                doc = nlp(temp)
+                tags = []
+                tags_only = []
+                for token in doc:
+                    if token.text not in string.punctuation:
+                        tags.append((token.text, token.tag_))
+                        tags_only.append(token.tag_)
+                d = {'temp': temp,
+                     'acc': acc,
+                     'tag': ' '.join(tags_only)
+                     }
+                tree = vwp.parse(tags)
+                d['vwp'] = is_match(tree)
+                tree = vp.parse(tags)
+                d['vp'] = is_match(tree)
+                tree = v.parse(tags)
+                d['v'] = is_match(tree)
+                if d['vwp'] or d['vp'] or d['v'] == False:
+                    d['other'] = True
+                else:
+                    d['other'] = False
+                res.append(d)
+            indices = list(range(len(res)))
+            indices.sort(key=lambda x: res[x]['acc'], reverse=True)
+            output = [0] * len(indices)
+            for i, x in enumerate(indices):
+                output[x] = i + 1
+            assert len(output) == len(res)
+            for d, rank in zip(res, output):
+                d['rank'] = rank
+            all_res += res
+    return all_res
+
+
+def pos_tag_ana(args):
+    print('processing mined')
+    mined_dir = 'output/exp_allpids_top30/trex/'
+    mined_res = process_template_pos_tags(mined_dir, args)
+    mined_df = pd.DataFrame(mined_res)
+    vwp_df = mined_df.loc[mined_df['vwp'] == True].copy()
+    vp_df = mined_df.loc[mined_df['vp'] == True].copy()
+    v_df = mined_df.loc[mined_df['v'] == True].copy()
+    other_df = mined_df.loc[mined_df['other'] == True].copy()
+    print("VWP: ", len(vwp_df))
+    print("VP: ", len(vp_df))
+    print("V: ", len(v_df))
+    print("OTHER: ", len(other_df))
+
+    vwp_df['type'] = 'VW*P'
+    vp_df['type'] = 'VP'
+    v_df['type'] = 'V'
+    other_df['type'] = 'Other'
+    new_df = pd.concat([vwp_df, vp_df, v_df, other_df])
+    plt.rcParams.update({'font.size': 14})
+
+    boxplot = new_df.boxplot(column='rank', by='type', showfliers=False, vert=True, showmeans=True,
+                               boxprops=dict(linewidth=2),
+                               flierprops=dict(linewidth=2),
+                               medianprops=dict(linewidth=2),
+                               whiskerprops=dict(linewidth=2),
+                               capprops=dict(linewidth=2),
+                               )
+    boxplot.set_xlabel('POS-based patterns', labelpad=10)
+    boxplot.set_ylabel('ranking position', labelpad=10)
+    plt.suptitle("")
+    plt.title("")
+    plt.tight_layout()
+
+    plt.savefig('pos_tag_ana.png')
+    plt.savefig('pos_tag_ana.eps', format='eps')
+
+    mined_df.groupby('tag')['rank'].describe().to_csv('postags_mined.csv')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='analyze output log')
     parser.add_argument('--task', type=str, help='task', required=True, 
         choices=['out', 'wikidata', 'sort', 'major_class', 'get_train_data',
                  'get_ppdb', 'case', 'merge_all_rel', 'split_dev', 'weight_ana',
                  'out_ana_opti', 'bt_filter', 'case_study', 'out_all_ana', 'sub_obj',
-                 'template_divergence', 'subj_obj_distance', 'rank_edit'])
+                 'template_divergence', 'subj_obj_distance', 'pos_tag_ana', 'rank_edit'])
     parser.add_argument('--inp', type=str, help='input file')
     parser.add_argument('--obj_file', type=str, help='obj file', default=None)
     parser.add_argument('--out', type=str, help='output file')
@@ -785,3 +903,6 @@ if __name__ == '__main__':
         subj_obj_distance_analysis(args)
     elif args.task == 'rank_edit':
         rank_edit(args)
+    elif args.task == 'pos_tag_ana':
+        pos_tag_ana(args)
+
