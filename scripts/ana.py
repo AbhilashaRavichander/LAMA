@@ -838,8 +838,7 @@ def pos_tag_ana(args):
                                flierprops=dict(linewidth=2),
                                medianprops=dict(linewidth=2),
                                whiskerprops=dict(linewidth=2),
-                               capprops=dict(linewidth=2),
-                               )
+                               capprops=dict(linewidth=2))
     boxplot.set_xlabel('POS-based patterns', labelpad=10)
     boxplot.set_ylabel('ranking position', labelpad=10)
     plt.suptitle("")
@@ -850,6 +849,8 @@ def pos_tag_ana(args):
     plt.savefig('pos_tag_ana.eps', format='eps')
 
     mined_df.groupby('tag')['rank'].describe().to_csv('postags_mined.csv')
+    print(mined_df.loc[mined_df['tag'].str.contains('VBD VBN IN')])
+    print(mined_df.loc[mined_df['tag'].str.contains('VBZ DT NN IN')])
 
 
 if __name__ == '__main__':
