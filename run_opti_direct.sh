@@ -29,15 +29,18 @@ optimize_on_the_fly() {  # only use for log features
         --save ${weight_file} \
         --num_feat ${num_feat} \
         --bt_obj ${bt_obj} \
-        --temperature ${temperature}
+        --temperature ${temperature} \
+        #--use_model2
 }
 
 predict() {
-    head_tail_dir=$1
-    weight_file=$2
-    num_feat=$3
+    lmmodel=$1
+    head_tail_dir=$2
+    weight_file=$3
+    num_feat=$4
+    suffix=$5
     more=""
-    if [ $# -gt 3 ]; then
+    if [ $# -gt 5 ]; then
         more=--enforce_prob
     fi
     bt_obj=0
@@ -45,7 +48,7 @@ predict() {
         bt_obj=5
     fi
     python scripts/run_experiments.py \
-        --lm_model ${lm} \
+        --lm_model ${lmmodel} \
         --rel_file ${merge_rel_file} \
         --prefix ${head_tail_dir} \
         --suffix .jsonl \
@@ -53,7 +56,7 @@ predict() {
         --batch_size 32 \
         --load ${weight_file} \
         --bt_obj ${bt_obj} \
-        --num_feat ${num_feat} ${more} &> ${weight_file}.out
+        --num_feat ${num_feat} ${more} &> ${weight_file}${suffix}
 }
 
 # optimize with softmax
@@ -65,7 +68,15 @@ do
     elif [ $feat_type == feature_test ]; then
         head_tail_dir=data/TREx
     fi
-    (CUDA_VISIBLE_DEVICES=$cuda1 optimize_on_the_fly ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight_${temp}/feat1_log_sm.pt 1 ${temp} ; CUDA_VISIBLE_DEVICES=$cuda1 predict data/TREx ${feature_root_dir}/${feat_type}/weight_${temp}/feat1_log_sm.pt 1) &
-    (CUDA_VISIBLE_DEVICES=$cuda2 optimize_on_the_fly ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight_${temp}/feat2_log_sm.pt 2 ${temp} ; CUDA_VISIBLE_DEVICES=$cuda2 predict data/TREx ${feature_root_dir}/${feat_type}/weight_${temp}/feat2_log_sm.pt 2) &
+    (CUDA_VISIBLE_DEVICES=$cuda1 optimize_on_the_fly ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight_${temp}/feat1_log_sm.pt 1 ${temp} ; CUDA_VISIBLE_DEVICES=$cuda1 predict ${lm} data/TREx ${feature_root_dir}/${feat_type}/weight_${temp}/feat1_log_sm.pt 1 .out) &
+    (CUDA_VISIBLE_DEVICES=$cuda2 optimize_on_the_fly ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight_${temp}/feat2_log_sm.pt 2 ${temp} ; CUDA_VISIBLE_DEVICES=$cuda2 predict ${lm} data/TREx ${feature_root_dir}/${feat_type}/weight_${temp}/feat2_log_sm.pt 2 .out) &
     wait
 done
+
+# joint training on two BERT-base and BERT-large
+#CUDA_VISIBLE_DEVICES=$cuda1 optimize_on_the_fly data/TREx_train_train ${feature_root_dir}/feature_train/weight_${temp}/feat1_log_sm.pt 1 ${temp}
+#CUDA_VISIBLE_DEVICES=$cuda1 predict bert_base data/TREx ${feature_root_dir}/feature_train/weight_${temp}/feat1_log_sm.pt 1 .base.out
+#CUDA_VISIBLE_DEVICES=$cuda1 predict bert_large data/TREx ${feature_root_dir}/feature_train/weight_${temp}/feat1_log_sm.pt 1 .large.out
+
+# cross model prediction
+#CUDA_VISIBLE_DEVICES=$cuda1 predict ${lm} data/TREx ${feature_root_dir}/feat1_log_sm.pt 1 .crossmodel.out

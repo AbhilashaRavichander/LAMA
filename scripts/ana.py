@@ -466,6 +466,24 @@ def weight_ana(args, top=1):
     print('peak {} out of {}, weight dim {}'.format(peak_count, all_count, weight_dim))
 
 
+def weight_out(args):
+    import torch
+    weight_file, relation_file = args.inp.split(':')
+    relations = load_file(relation_file)
+    rel2temp = dict((rel['relation'], rel['template']) for rel in relations)
+    weights = torch.load(weight_file)
+
+    for rel in listdir_shell('data/TREx'):
+        rel = rel.split('.', 1)[0]
+        weight_dim = weights[rel].size(0)
+        weight = (weights[rel].exp() / weights[rel].exp().sum()).cpu().numpy().tolist()
+        if weight_dim != len(rel2temp[rel]):
+            print('weight dim != #templates')
+        with open(os.path.join(args.out, rel + '.jsonl'), 'w') as fout:
+            for t, w in zip(rel2temp[rel], weight):
+                fout.write(json.dumps({'template': t, 'weight': w}) + '\n')
+
+
 def parse_fairseq_file(filename):
     results: List[Tuple[str, float]] = []
     with open(filename, 'r') as fin:
@@ -857,7 +875,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='analyze output log')
     parser.add_argument('--task', type=str, help='task', required=True, 
         choices=['out', 'wikidata', 'sort', 'major_class', 'get_train_data',
-                 'get_ppdb', 'case', 'merge_all_rel', 'split_dev', 'weight_ana',
+                 'get_ppdb', 'case', 'merge_all_rel', 'split_dev', 'weight_ana', 'weight_out',
                  'out_ana_opti', 'bt_filter', 'case_study', 'out_all_ana', 'sub_obj',
                  'template_divergence', 'subj_obj_distance', 'pos_tag_ana', 'rank_edit'])
     parser.add_argument('--inp', type=str, help='input file')
@@ -890,6 +908,8 @@ if __name__ == '__main__':
         split_dev(args)
     elif args.task == 'weight_ana':
         weight_ana(args, top=3)
+    elif args.task == 'weight_out':
+        weight_out(args)
     elif args.task == 'out_ana_opti':
         out_ana_optimize(args)
     elif args.task == 'bt_filter':

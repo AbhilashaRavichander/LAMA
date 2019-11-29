@@ -95,7 +95,7 @@ get_temp_ensemble_dynamic_score() {
 }
 
 # refine templates
-if [ $# -gt 6 ]; then
+if [ $# -gt 7 ]; then
     refine_temp_dir=$7
     refine_temp_score_dir=$8
     refine_temp ${raw_temp_dir} data/TREx_train/ ${refine_temp_dir} ${refine_temp_score_dir}
@@ -103,9 +103,9 @@ if [ $# -gt 6 ]; then
 fi
 
 # get template score on test set
-get_temp_score ${raw_temp_dir} data/TREx/ ${raw_temp_socre_dir} ${top_rel} &
+get_temp_score ${raw_temp_dir} data/TREx ${raw_temp_socre_dir} ${top_rel} &
 # get template score on training set
-get_temp_score ${raw_temp_dir} data/TREx_train/ ${raw_temp_socre_dir_train} ${top_rel} &
+get_temp_score ${raw_temp_dir} data/TREx_train_train ${raw_temp_socre_dir_train} ${top_rel} &
 wait
 
 # sort all the templates
@@ -124,8 +124,8 @@ for file in data/TREx/*; do
 done
 
 # top 10 avg
-get_temp_ensemble_score_all ${sort_temp_dir} data/TREx/ ${sort_temp_score_dir} 10 &
-get_temp_ensemble_score_all ${sort_temp_dir_nom} data/TREx/ ${sort_temp_score_dir_nom} 10 &
+get_temp_ensemble_score_all ${sort_temp_dir} data/TREx_train_train_dev ${sort_temp_score_dir} 10 &
+get_temp_ensemble_score_all ${sort_temp_dir_nom} data/TREx_train_train_dev ${sort_temp_score_dir_nom} 10 &
 wait
 
 # all avg
