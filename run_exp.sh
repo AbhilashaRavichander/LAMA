@@ -8,7 +8,7 @@ sort_temp_dir=$5
 sort_temp_dir_nom=${sort_temp_dir}_nomanual
 sort_temp_score_dir=$6
 sort_temp_score_dir_nom=${sort_temp_score_dir}_nomanual
-top_rel=30
+top_rel=40
 
 #set -e
 

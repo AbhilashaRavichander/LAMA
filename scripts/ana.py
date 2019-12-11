@@ -93,6 +93,9 @@ def case_study(args):
 
 def out_ana(args):
     templates, stat, subjs, objs = load_out_file(args)
+    if len(templates) == 0:
+        templates = [None]
+        stat = np.zeros((1, 10))
     obj_entropy = None
     if objs is not None:
         uni, counts = np.unique(objs, return_counts=True)
@@ -871,13 +874,33 @@ def pos_tag_ana(args):
     print(mined_df.loc[mined_df['tag'].str.contains('VBZ DT NN IN')])
 
 
+def combine_prompt(args, max1=30, max2=10):
+    dir1, dir2 = args.inp.split(':')
+    for root, _, files in os.walk(dir1):
+        for file in files:
+            file1 = os.path.join(dir1, file)
+            file2 = os.path.join(dir2, file)
+            if not os.path.exists(file1) or not os.path.exists(file2):
+                continue
+            with open(file1, 'r') as fin1, open(file2, 'r') as fin2, open(os.path.join(args.out, file), 'w') as fout:
+                for i, l in enumerate(fin1):
+                    if i >= max1:
+                        break
+                    fout.write(l)
+                for i, l in enumerate(fin2):
+                    if i >= max2:
+                        break
+                    fout.write(l)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='analyze output log')
     parser.add_argument('--task', type=str, help='task', required=True, 
         choices=['out', 'wikidata', 'sort', 'major_class', 'get_train_data',
                  'get_ppdb', 'case', 'merge_all_rel', 'split_dev', 'weight_ana', 'weight_out',
                  'out_ana_opti', 'bt_filter', 'case_study', 'out_all_ana', 'sub_obj',
-                 'template_divergence', 'subj_obj_distance', 'pos_tag_ana', 'rank_edit'])
+                 'template_divergence', 'subj_obj_distance', 'pos_tag_ana', 'rank_edit',
+                 'combine_prompt'])
     parser.add_argument('--inp', type=str, help='input file')
     parser.add_argument('--obj_file', type=str, help='obj file', default=None)
     parser.add_argument('--out', type=str, help='output file')
@@ -903,7 +926,7 @@ if __name__ == '__main__':
     elif args.task == 'case':
         case_ana(args)
     elif args.task == 'merge_all_rel':
-        merge_all_rel(args, top=30)
+        merge_all_rel(args, top=40)
     elif args.task == 'split_dev':
         split_dev(args)
     elif args.task == 'weight_ana':
@@ -926,4 +949,5 @@ if __name__ == '__main__':
         rank_edit(args)
     elif args.task == 'pos_tag_ana':
         pos_tag_ana(args)
-
+    elif args.task == 'combine_prompt':
+        combine_prompt(args, max1=30, max2=10)
