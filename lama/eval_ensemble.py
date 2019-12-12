@@ -65,7 +65,7 @@ def main(args):
 
         ensemble_log_probs = 0
         for prompt, weight in zip(prompts, weights):
-            prompt = parse_prompt(prompt, args.subject, '[MASK]')
+            prompt = parse_prompt(prompt, args.subject, model.mask_token)
             log_prob, [token_ids], [masked_indices], _, _ = model.get_batch_generation([prompt], try_cuda=True)
 
             if vocab_subset is not None:
