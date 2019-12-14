@@ -521,6 +521,12 @@ def bt_filter(args):
             score = final_scores[i][r]
             if temp.find('[X]') == -1 or temp.find('[Y]') == -1:
                 continue
+            xf = temp.find('[X]')
+            if temp.find('[X]', xf + 1) != -1:
+                continue
+            xf = temp.find('[Y]')
+            if temp.find('[Y]', xf + 1) != -1:
+                continue
             if temp not in seen:
                 rel2temps[rel].append((temp, score))
                 seen.add(temp)
@@ -926,7 +932,7 @@ if __name__ == '__main__':
     elif args.task == 'case':
         case_ana(args)
     elif args.task == 'merge_all_rel':
-        merge_all_rel(args, top=40)
+        merge_all_rel(args, top=30)
     elif args.task == 'split_dev':
         split_dev(args)
     elif args.task == 'weight_ana':
