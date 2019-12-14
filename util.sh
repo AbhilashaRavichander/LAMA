@@ -11,9 +11,9 @@ eval() {
         echo ${bfile}
         if [ -f "${outfile}" ]; then
             if [ $# -gt 1 ]; then
-                python scripts/ana.py --task out --inp ${outfile} --obj_file ${objfile}
+                python scripts/ana.py --task out --inp ${outfile} --obj_file ${objfile} #--exclude_first
             else
-                python scripts/ana.py --task out --inp ${outfile}
+                python scripts/ana.py --task out --inp ${outfile} #--exclude_first
             fi
         fi
     done

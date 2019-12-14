@@ -124,8 +124,8 @@ for file in data/TREx/*; do
 done
 
 # top 10 avg
-get_temp_ensemble_score_all ${sort_temp_dir} data/TREx_train_train_dev ${sort_temp_score_dir} 10 &
-get_temp_ensemble_score_all ${sort_temp_dir_nom} data/TREx_train_train_dev ${sort_temp_score_dir_nom} 10 &
+get_temp_ensemble_score_all ${sort_temp_dir} data/TREx ${sort_temp_score_dir} 10 &
+get_temp_ensemble_score_all ${sort_temp_dir_nom} data/TREx ${sort_temp_score_dir_nom} 10 &
 wait
 
 # all avg
