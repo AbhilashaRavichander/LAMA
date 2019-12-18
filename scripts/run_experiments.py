@@ -94,10 +94,20 @@ LM_ROBERTA_BASE = {
     "roberta_vocab_name": "dict.txt"
 }
 
+LM_ERNIE_BASE = {
+    "lm": "ernie",
+    "label": "ernie_base",
+    "models_names": ["ernie"],
+    "bert_model_name": "ernie_base",
+    "bert_model_dir": "pre-trained_language_models/ernie_base",
+    "kg_path": "pre-trained_language_models/kg_embed"
+}
+
 name2lm = {
     'bert_base': LM_BERT_BASE,
     'bert_large': LM_BERT_LARGE,
     'roberta_base': LM_ROBERTA_BASE,
+    'ernie_base': LM_ERNIE_BASE,
 }
 
 def run_experiments(
@@ -183,7 +193,7 @@ def run_experiments(
             "full_logdir": "output/results/{}/{}".format(
                 input_param["label"], relation["relation"]
             ),
-            "lowercase": False,
+            "lowercase": False,  # TODO: add an external param
             "max_sentence_length": 100,
             "threads": -1,
             "interactive": False,
@@ -443,7 +453,8 @@ if __name__ == "__main__":
     '''
     logging.disable(logging.WARNING)
     parser = argparse.ArgumentParser(description='run exp for multiple relational phrase')
-    parser.add_argument('--lm_model', type=str, default='bert_base', choices=['bert_base', 'bert_large', 'roberta_base'])
+    parser.add_argument('--lm_model', type=str, default='bert_base',
+                        choices=['bert_base', 'bert_large', 'roberta_base', 'ernie_base'])
     parser.add_argument('--rel_file', type=str, default='data/Google_RE_patty_template/place_of_death.jsonl')
     parser.add_argument('--refine_template', type=str, default=None)
     parser.add_argument('--prefix', type=str, default='data/Google_RE/')

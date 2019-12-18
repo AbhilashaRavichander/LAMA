@@ -10,6 +10,7 @@ from .gpt_connector import GPT
 from .transformerxl_connector import TransformerXL
 from .roberta_connector import Roberta
 from .template_model import TempModel
+from .ernie_connector import Ernie
 
 
 def build_model_by_name(lm, args, verbose=True):
@@ -23,7 +24,8 @@ def build_model_by_name(lm, args, verbose=True):
         bert=Bert,
         gpt=GPT,
         transformerxl=TransformerXL,
-        roberta=Roberta
+        roberta=Roberta,
+        ernie=Ernie
     )
     if lm not in MODEL_NAME_TO_CLASS:
         raise ValueError("Unrecognized Language Model: %s." % lm)

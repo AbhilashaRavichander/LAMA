@@ -12,6 +12,9 @@ class TempModel(nn.Module):
         self.num_feat = num_feat
         for rel, numtemp in rel2numtemp.items():
             setattr(self, rel, nn.Parameter(torch.zeros(numtemp * num_feat)))
+        # TODO: only use the first template
+        #for rel, numtemp in rel2numtemp.items():
+        #    setattr(self, rel, nn.Parameter(torch.tensor([1.0] + [float('-inf')] * (numtemp - 1))))
 
     def set_weight(self, relation: str, new_weight: torch.Tensor):
         weight = getattr(self, relation)

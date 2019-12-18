@@ -106,7 +106,7 @@ class Roberta(Base_Connector):
        return self.task.source_dictionary.encode_line(
            ' '.join(self.tokenize(text, add_start=add_start)), append_eos=True, add_if_not_exist=False).long()
 
-    def get_batch_generation(self, sentences_list, logger=None, try_cuda=True, relation_mask=None):
+    def get_batch_generation(self, sentences_list, logger=None, try_cuda=True, relation_mask=None, entity_list=None):
         if not sentences_list:
             return None
         if try_cuda:

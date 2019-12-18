@@ -245,7 +245,7 @@ class Bert(Base_Connector):
     def _cuda(self):
         self.masked_bert_model.cuda()
 
-    def get_batch_generation(self, sentences_list, logger=None, try_cuda=True, relation_mask=None):
+    def get_batch_generation(self, sentences_list, logger=None, try_cuda=True, relation_mask=None, entity_list=None):
         if not sentences_list:
             return None
         if try_cuda:

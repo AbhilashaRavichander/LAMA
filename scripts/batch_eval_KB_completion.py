@@ -60,6 +60,20 @@ def parse_template(template, subject_label, object_label):
     return [template]
 
 
+def get_entity_list(template, subject_label=None, object_label=None):
+    # TODO: handle both sub and obj
+    SUBJ_SYMBOL = "[X]"
+    OBJ_SYMBOL = "[Y]"
+    entity_list = []
+    if subject_label is not None:
+        start = template.find(SUBJ_SYMBOL)
+        entity_list.append([subject_label, start, start + len(subject_label), 1.0])
+    elif object_label is not None:
+        start = template.find(OBJ_SYMBOL)
+        entity_list.append([object_label, start, start + len(object_label), 1.0])
+    return entity_list
+
+
 def parse_template_tokenize(template, subject_label, model, mask_part='relation'):
     assert mask_part in {'relation', 'sub'}
     SUBJ_SYMBOL = "[X]"
@@ -215,11 +229,12 @@ def lowercase_samples(samples):
         sample["obj_label"] = sample["obj_label"].lower()
         sample["sub_label"] = sample["sub_label"].lower()
         lower_masked_sentences = []
-        for sentence in sample["masked_sentences"]:
-            sentence = sentence.lower()
-            sentence = sentence.replace(base.MASK.lower(), base.MASK)
-            lower_masked_sentences.append(sentence)
-        sample["masked_sentences"] = lower_masked_sentences
+        if 'masked_sentences' in sample:
+            for sentence in sample["masked_sentences"]:
+                sentence = sentence.lower()
+                sentence = sentence.replace(base.MASK.lower(), base.MASK)
+                lower_masked_sentences.append(sentence)
+            sample["masked_sentences"] = lower_masked_sentences
         new_samples.append(sample)
     return new_samples
 
@@ -347,7 +362,7 @@ def main(args,
     index_list = None
     msg += "args: {}\n".format(args)
     if args.common_vocab_filename is not None:
-        vocab_subset = load_vocab(args.common_vocab_filename)
+        vocab_subset = load_vocab(args.common_vocab_filename, lower=args.lowercase)
         msg += "common vocabulary size: {}\n".format(len(vocab_subset))
 
         # optimization for some LM (such as ELMo)
@@ -401,14 +416,14 @@ def main(args,
         P1_li = [[]]
 
     data = load_file(args.dataset_filename)
+    for s in data:
+        s['raw_sub_label'] = s['sub_label']
+        s['raw_obj_label'] = s['obj_label']
 
     if args.lowercase:
         # lowercase all samples
         logger.info("lowercasing all samples...")
-        all_samples = lowercase_samples(data)
-    else:
-        # keep samples as they are
-        all_samples = data
+        data = lowercase_samples(data)
 
     all_samples, ret_msg = filter_samples(
         model, data, vocab_subset, args.max_sentence_length, args.template
@@ -429,15 +444,17 @@ def main(args,
         # if template is active (1) use a single example for (sub,obj) and (2) ...
         if template and template != "":
             facts = []
+            samples = []
             for sample in all_samples:
                 sub = sample["sub_label"]
                 obj = sample["obj_label"]
                 if (sub, obj) not in facts:
                     facts.append((sub, obj))
+                    samples.append(sample)
             local_msg = "distinct template facts: {}".format(len(facts))
             logger.info("\n" + local_msg + "\n")
             new_all_samples = []
-            for fact in facts:
+            for fact, raw_sample in zip(facts, samples):
                 (sub, obj) = fact
                 sample = {}
                 sample["sub_label"] = sub
@@ -445,6 +462,9 @@ def main(args,
                 # sobstitute all sentences with a standard template
                 sample["masked_sentences"] = parse_template(
                     template.strip(), sample["sub_label"].strip(), model.mask_token
+                )
+                sample['entity_list'] = get_entity_list(
+                    template.strip(), raw_sample["raw_sub_label"].strip(), None
                 )
                 if dynamic.startswith('bt_topk') or temp_model is not None:
                     sample['sub_masked_sentences'] = parse_template_tokenize(
@@ -467,6 +487,11 @@ def main(args,
             if "uuid" not in sample:
                 sample["uuid"] = i
             i += 1
+
+        if args.lowercase:
+            # lowercase all samples
+            logger.info("lowercasing all samples...")
+            new_all_samples = lowercase_samples(new_all_samples)
 
         # shuffle data
         if shuffle_data:
@@ -529,9 +554,10 @@ def main(args,
                 for ps, ts in zip(samples_b_prev, samples_b_this):
                     assert ps['uuid'] == ts['uuid']
 
+            entity_list_b = [s['entity_list'] for s in samples_b_this]
             # TODO: add tokens_tensor and mask_tensor for more models
             original_log_probs_list, token_ids_list, masked_indices_list, tokens_tensor, mask_tensor = \
-                model.get_batch_generation(sentences_b, logger=logger)
+                model.get_batch_generation(sentences_b, logger=logger, entity_list=entity_list_b)
             if model2 is not None:
                 original_log_probs_list2, token_ids_list2, masked_indices_list2, tokens_tensor2, mask_tensor2 = \
                     model2.get_batch_generation(sentences_b, logger=logger)

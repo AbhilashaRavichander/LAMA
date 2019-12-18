@@ -135,8 +135,8 @@ def print_sentence_predictions(log_probs, token_ids, vocab,
     return perplexity, msg
 
 
-def load_vocab(vocab_filename):
+def load_vocab(vocab_filename, lower=False):
     with open(vocab_filename, "r") as f:
         lines = f.readlines()
-    vocab = [x.strip() for x in lines]
+    vocab = [x.strip() if not lower else x.strip().lower() for x in lines]
     return vocab

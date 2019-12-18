@@ -55,7 +55,19 @@ CASED_MODELS = [
     "bert_model_name": "bert-large-cased",
     "bert_model_dir": "pre-trained_language_models/bert/cased_L-24_H-1024_A-16/",
     "bert_vocab_name": "vocab.txt"
+  },
+  '''
+  {
+    # "RoBERTa BASE CASED"
+    "lm": "roberta",
+    "label": "roberta_base",
+    "models_names": ["roberta"],
+    "roberta_model_name": "model.pt",
+    "roberta_model_dir": "pre-trained_language_models/roberta/roberta.base",
+    "roberta_vocab_name": "dict.txt",
+    "max_sentence_length": 100
   }
+  '''
 ]
 
 CASED_COMMON_VOCAB_FILENAME = "pre-trained_language_models/common_vocab_cased.txt"
