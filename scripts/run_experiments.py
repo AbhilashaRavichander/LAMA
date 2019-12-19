@@ -137,6 +137,7 @@ def run_experiments(
     num_feat=1,
     temperature=0.0,
     use_model2=False,
+    lowercase=False,
     input_param={
         "lm": "bert",
         "label": "bert_large",
@@ -202,7 +203,7 @@ def run_experiments(
             "full_logdir": "output/results/{}/{}".format(
                 input_param["label"], relation["relation"]
             ),
-            "lowercase": False,  # TODO: add an external param
+            "lowercase": lowercase,
             "max_sentence_length": 100,
             "threads": -1,
             "interactive": False,
@@ -385,9 +386,10 @@ def get_relation_phrase_parameters(args):
     num_feat = args.num_feat
     temperature = float(args.temperature)
     use_model2 = args.use_model2
+    lowercase = args.lowercase
     return relations, data_path_pre, data_path_post, args.refine_template, \
            args.get_objs, args.batch_size, args.dynamic, args.use_prob, \
-           bt_obj, temp_model, save, load, feature_dir, enforce_prob, num_feat, temperature, use_model2
+           bt_obj, temp_model, save, load, feature_dir, enforce_prob, num_feat, temperature, use_model2, lowercase
 
 
 def get_test_phrase_parameters(args):
@@ -417,9 +419,10 @@ def get_test_phrase_parameters(args):
     num_feat = 1
     temperature = 0.0
     use_model2 = True
+    lowercase = False
     return relations, data_path_pre, data_path_post, refine_template, get_objs, \
            batch_size, dynamic, use_prob, bt_obj, temp_model, save, load, feature_dir, \
-           enforce_prob, num_feat, temperature, use_model2
+           enforce_prob, num_feat, temperature, use_model2, lowercase
 
 
 def get_ConceptNet_parameters(data_path_pre="data/"):
@@ -483,6 +486,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_feat', type=int, help='number of features', default=1)
     parser.add_argument('--temperature', type=float, help='temperature for sample weight', default=0.0)
     parser.add_argument('--use_model2', help='use two model in optimization', action='store_true')
+    parser.add_argument('--lowercase', help='whether lowercase the input', action='store_true')
     args = parser.parse_args()
     parameters = get_relation_phrase_parameters(args)
     #parameters = get_test_phrase_parameters(args)
