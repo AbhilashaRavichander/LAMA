@@ -461,7 +461,7 @@ def main(args,
                 sample["obj_label"] = obj
                 # sobstitute all sentences with a standard template
                 sample["masked_sentences"] = parse_template(
-                    template.strip(), sample["sub_label"].strip(), model.mask_token
+                    template.strip(), sample["sub_label"].strip(), model.mask_token  # TODO: use uppercase for entity linking?
                 )
                 sample['entity_list'] = get_entity_list(
                     template.strip(), raw_sample["raw_sub_label"].strip(), None

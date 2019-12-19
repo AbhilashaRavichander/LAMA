@@ -6,6 +6,7 @@ feature_root_dir=$3
 temp=$4
 cuda1=$5
 cuda2=$6
+batch_size=32
 
 #set -e
 
@@ -25,7 +26,7 @@ optimize_on_the_fly() {  # only use for log features
         --prefix ${head_tail_dir} \
         --suffix .jsonl \
         --temp_model mixture_optimize \
-        --batch_size 32 \
+        --batch_size ${batch_size} \
         --save ${weight_file} \
         --num_feat ${num_feat} \
         --bt_obj ${bt_obj} \
@@ -53,7 +54,7 @@ predict() {
         --prefix ${head_tail_dir} \
         --suffix .jsonl \
         --temp_model mixture_predict \
-        --batch_size 32 \
+        --batch_size ${batch_size} \
         --load ${weight_file} \
         --bt_obj ${bt_obj} \
         --num_feat ${num_feat} ${more} &> ${weight_file}${suffix}
@@ -80,3 +81,6 @@ done
 
 # cross model prediction
 #CUDA_VISIBLE_DEVICES=$cuda1 predict ${lm} data/TREx ${feature_root_dir}/feat1_log_sm.pt 1 .crossmodel.out
+
+# only prediction (LAMA-UHN)
+#CUDA_VISIBLE_DEVICES=$cuda1 predict ${lm} data/TREx_UHN ${feature_root_dir}/feat1_log_sm.pt 1 .uhn.out

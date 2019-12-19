@@ -103,11 +103,20 @@ LM_ERNIE_BASE = {
     "kg_path": "pre-trained_language_models/kg_embed"
 }
 
+LM_KNOWBERT_BASE = {
+    "lm": "knowbert",
+    "label": "knowbert_base",
+    "models_names": ["knowbert"],
+    "bert_model_name": "knowbert_base",
+    "bert_model_dir": "pre-trained_language_models/knowbert_wiki_wordnet_model.tar.gz"
+}
+
 name2lm = {
     'bert_base': LM_BERT_BASE,
     'bert_large': LM_BERT_LARGE,
     'roberta_base': LM_ROBERTA_BASE,
     'ernie_base': LM_ERNIE_BASE,
+    'knowbert_base': LM_KNOWBERT_BASE
 }
 
 def run_experiments(
@@ -454,7 +463,7 @@ if __name__ == "__main__":
     logging.disable(logging.WARNING)
     parser = argparse.ArgumentParser(description='run exp for multiple relational phrase')
     parser.add_argument('--lm_model', type=str, default='bert_base',
-                        choices=['bert_base', 'bert_large', 'roberta_base', 'ernie_base'])
+                        choices=['bert_base', 'bert_large', 'roberta_base', 'ernie_base', 'knowbert_base'])
     parser.add_argument('--rel_file', type=str, default='data/Google_RE_patty_template/place_of_death.jsonl')
     parser.add_argument('--refine_template', type=str, default=None)
     parser.add_argument('--prefix', type=str, default='data/Google_RE/')
