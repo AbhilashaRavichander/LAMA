@@ -461,7 +461,9 @@ def main(args,
                 sample["obj_label"] = obj
                 # sobstitute all sentences with a standard template
                 sample["masked_sentences"] = parse_template(
-                    template.strip(), sample["sub_label"].strip(), model.mask_token  # TODO: use uppercase for entity linking?
+                    template.strip(),
+                    raw_sample["raw_sub_label"].strip() if args.upper_entity else sample["sub_label"].strip(),
+                    model.mask_token
                 )
                 sample['entity_list'] = get_entity_list(
                     template.strip(), raw_sample["raw_sub_label"].strip(), None
@@ -488,7 +490,7 @@ def main(args,
                 sample["uuid"] = i
             i += 1
 
-        if args.lowercase:
+        if args.lowercase and not args.upper_entity:
             # lowercase all samples
             logger.info("lowercasing all samples...")
             new_all_samples = lowercase_samples(new_all_samples)

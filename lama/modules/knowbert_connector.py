@@ -17,7 +17,9 @@ class KnowBert(Base_Connector):
             raise ValueError('require bert_model_dir')
 
         # load batcher
-        self.batcher = KnowBertBatchifier(args.bert_model_dir, batch_size=args.batch_size)
+        self.batcher = KnowBertBatchifier(args.bert_model_dir,
+                                          batch_size=args.batch_size,
+                                          masking_strategy='full_mask')
         self.tokenizer = self.batcher.tokenizer_and_candidate_generator
 
         # init vocab

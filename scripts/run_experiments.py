@@ -138,6 +138,7 @@ def run_experiments(
     temperature=0.0,
     use_model2=False,
     lowercase=False,
+    upper_entity=False,
     input_param={
         "lm": "bert",
         "label": "bert_large",
@@ -152,6 +153,7 @@ def run_experiments(
     all_Precision1 = []
     type_Precision1 = defaultdict(list)
     type_count = defaultdict(list)
+    print('use lowercase: {}'.format(lowercase))
 
     results_file = open("last_results.csv", "w+")
 
@@ -204,6 +206,7 @@ def run_experiments(
                 input_param["label"], relation["relation"]
             ),
             "lowercase": lowercase,
+            "upper_entity": upper_entity,
             "max_sentence_length": 100,
             "threads": -1,
             "interactive": False,
@@ -387,9 +390,11 @@ def get_relation_phrase_parameters(args):
     temperature = float(args.temperature)
     use_model2 = args.use_model2
     lowercase = args.lowercase
+    upper_entity = args.upper_entity
     return relations, data_path_pre, data_path_post, args.refine_template, \
            args.get_objs, args.batch_size, args.dynamic, args.use_prob, \
-           bt_obj, temp_model, save, load, feature_dir, enforce_prob, num_feat, temperature, use_model2, lowercase
+           bt_obj, temp_model, save, load, feature_dir, enforce_prob, num_feat, temperature, \
+           use_model2, lowercase, upper_entity
 
 
 def get_test_phrase_parameters(args):
@@ -420,9 +425,10 @@ def get_test_phrase_parameters(args):
     temperature = 0.0
     use_model2 = True
     lowercase = False
+    upper_entity = False
     return relations, data_path_pre, data_path_post, refine_template, get_objs, \
            batch_size, dynamic, use_prob, bt_obj, temp_model, save, load, feature_dir, \
-           enforce_prob, num_feat, temperature, use_model2, lowercase
+           enforce_prob, num_feat, temperature, use_model2, lowercase, upper_entity
 
 
 def get_ConceptNet_parameters(data_path_pre="data/"):
@@ -487,6 +493,7 @@ if __name__ == "__main__":
     parser.add_argument('--temperature', type=float, help='temperature for sample weight', default=0.0)
     parser.add_argument('--use_model2', help='use two model in optimization', action='store_true')
     parser.add_argument('--lowercase', help='whether lowercase the input', action='store_true')
+    parser.add_argument('--upper_entity', help='use upper case entity for linking', action='store_true')
     args = parser.parse_args()
     parameters = get_relation_phrase_parameters(args)
     #parameters = get_test_phrase_parameters(args)
