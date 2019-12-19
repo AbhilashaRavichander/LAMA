@@ -542,24 +542,27 @@ def bt_filter(args):
 
 
 def sub_obj(args):
-    subs_li, objs_li, obj_ent_li = [], [], []
+    fact_li, subs_li, objs_li, obj_ent_li = [], [], [], []
     for root, dirs, files in os.walk(args.inp):
         for file in files:
             subs, objs = defaultdict(lambda: 0), defaultdict(lambda: 0)
+            num_fact = 0
             with open(os.path.join(root, file), 'r') as fin:
                 for l in fin:
                     sub = json.loads(l)['sub_label']
                     obj = json.loads(l)['obj_label']
                     subs[sub] += 1
                     objs[obj] += 1
+                    num_fact += 1
             counts = np.array(list(objs.values()))
             counts = counts / np.sum(counts)
             obj_entropy = scipy.stats.entropy(counts)
+            fact_li.append(num_fact)
             subs_li.append(len(subs))
             objs_li.append(len(objs))
             obj_ent_li.append(obj_entropy)
             print(file, len(subs), len(objs), obj_entropy, sorted(objs.items(), key=lambda x: -x[1])[0])
-    print(np.mean(subs_li), np.mean(objs_li), np.mean(obj_ent_li))
+    print(np.mean(fact_li), np.mean(subs_li), np.mean(objs_li), np.mean(obj_ent_li))
 
 def calc_l1_distance(list1, list2):
     dist = 0

@@ -153,7 +153,7 @@ def run_experiments(
     all_Precision1 = []
     type_Precision1 = defaultdict(list)
     type_count = defaultdict(list)
-    print('use lowercase: {}'.format(lowercase))
+    print('use lowercase: {}, use upper entity: {}'.format(lowercase, upper_entity))
 
     results_file = open("last_results.csv", "w+")
 
