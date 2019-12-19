@@ -468,7 +468,7 @@ def main(args,
                 sample['entity_list'] = get_entity_list(
                     template.strip(), raw_sample["raw_sub_label"].strip(), None
                 )
-                if dynamic.startswith('bt_topk') or temp_model is not None:
+                if dynamic.startswith('bt_topk') or (temp_model is not None and bt_obj):
                     sample['sub_masked_sentences'] = parse_template_tokenize(
                         template.strip(), sample["sub_label"].strip(), model, mask_part='sub'
                     )
