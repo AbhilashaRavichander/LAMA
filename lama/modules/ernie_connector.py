@@ -96,16 +96,8 @@ class Ernie(Base_Connector):
             for line in fin:
                 qid, eid = line.strip().split('\t')
                 self.entity2id[qid] = int(eid)
-
-        vecs = []
-        vecs.append([0] * 100)
-        with open(os.path.join(args.kg_path, 'entity2vec.vec'), 'r') as fin:
-            for i, line in enumerate(fin):
-                vec = line.strip().split('\t')
-                vec = [float(x) for x in vec]
-                vecs.append(vec)
+        vecs = np.load(os.path.join(args.kg_path, 'entity2vec.npy'))  # the first element is pad with all zeros
         self.kg_emb = torch.nn.Embedding.from_pretrained(torch.FloatTensor(vecs))
-        #self.kg_emb = torch.nn.Embedding.from_pretrained(torch.FloatTensor(np.zeros((5040987, 100))))  # TODO: debug
 
         self.bert_model = self.ernie_model.bert
         self.pad_id = self.inverse_vocab[BERT_PAD]
@@ -170,7 +162,7 @@ class Ernie(Base_Connector):
             text_a = sentences[0]  # TODO: handle the second sentence
             #text_a_ann = tagme.annotate(text_a)
             #ents_a = self.get_ents(text_a_ann)
-            ents_a = self.ent_to_qid(ents_a)
+            #ents_a = self.ent_to_qid(ents_a)
             tokens_a, entities_a = self.tokenizer.tokenize(text_a, ents_a)
 
             tokens = ['[CLS]'] + tokens_a + ['[SEP]']

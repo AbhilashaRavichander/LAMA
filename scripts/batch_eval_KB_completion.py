@@ -60,17 +60,17 @@ def parse_template(template, subject_label, object_label):
     return [template]
 
 
-def get_entity_list(template, subject_label=None, object_label=None):
+def get_entity_list(template, subject_label=None, subject_uri=None, object_label=None, object_uri=None):
     # TODO: handle both sub and obj
     SUBJ_SYMBOL = "[X]"
     OBJ_SYMBOL = "[Y]"
     entity_list = []
     if subject_label is not None:
         start = template.find(SUBJ_SYMBOL)
-        entity_list.append([subject_label, start, start + len(subject_label), 1.0])
+        entity_list.append([subject_uri, start, start + len(subject_label), 1.0])
     elif object_label is not None:
         start = template.find(OBJ_SYMBOL)
-        entity_list.append([object_label, start, start + len(object_label), 1.0])
+        entity_list.append([object_uri, start, start + len(object_label), 1.0])
     return entity_list
 
 
@@ -466,7 +466,7 @@ def main(args,
                     model.mask_token
                 )
                 sample['entity_list'] = get_entity_list(
-                    template.strip(), raw_sample["raw_sub_label"].strip(), None
+                    template.strip(), raw_sample['raw_sub_label'].strip(), raw_sample['sub_uri'], None, None
                 )
                 if dynamic.startswith('bt_topk') or (temp_model is not None and bt_obj):
                     sample['sub_masked_sentences'] = parse_template_tokenize(

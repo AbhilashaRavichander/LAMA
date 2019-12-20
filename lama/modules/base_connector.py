@@ -121,7 +121,11 @@ class Base_Connector():
     def init_indices_for_filter_logprobs(self, vocab_subset, logger=None):
         index_list = []
         new_vocab_subset = []
+        used_words = set()
         for word in vocab_subset:
+            if word in used_words:
+                continue
+            used_words.add(word)
             if word in self.inverse_vocab:
                 inverse_id = self.inverse_vocab[word]
                 index_list.append(inverse_id)
