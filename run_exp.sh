@@ -8,7 +8,10 @@ sort_temp_dir=$5
 sort_temp_dir_nom=${sort_temp_dir}_nomanual
 sort_temp_score_dir=$6
 sort_temp_score_dir_nom=${sort_temp_score_dir}_nomanual
+
 top_rel=40
+lowercase=--lowercase
+upperentity=--upper_entity
 
 #set -e
 
@@ -38,7 +41,7 @@ get_temp_score() {
             --prefix ${2} \
             --suffix .jsonl \
             --top ${4} \
-            --batch_size 32 > ${3}/${bfile}.out 2>&1
+            --batch_size 32 ${lowercase} ${upperentity} > ${3}/${bfile}.out 2>&1
    done
 }
 
@@ -54,7 +57,7 @@ get_temp_ensemble_score() {
             --suffix .jsonl \
             --top ${4} \
             --ensemble \
-            --batch_size 32 > ${3}${4}/${bfile}.out 2>&1
+            --batch_size 32 ${lowercase} ${upperentity} > ${3}${4}/${bfile}.out 2>&1
     done
 }
 
@@ -71,7 +74,7 @@ get_temp_ensemble_score_all() {
             --top ${4} \
             --ensemble \
             --dynamic all_topk \
-            --batch_size 32 > ${3}${4}all/${bfile}.out 2>&1
+            --batch_size 32 ${lowercase} ${upperentity} > ${3}${4}all/${bfile}.out 2>&1
     done
 }
 

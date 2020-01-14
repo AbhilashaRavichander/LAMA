@@ -7,7 +7,8 @@ temp=$4
 cuda1=$5
 cuda2=$6
 batch_size=32
-
+lowercase=--lowercase
+upperentity=--upper_entity
 #set -e
 
 optimize_on_the_fly() {  # only use for log features
@@ -31,6 +32,7 @@ optimize_on_the_fly() {  # only use for log features
         --num_feat ${num_feat} \
         --bt_obj ${bt_obj} \
         --temperature ${temperature} \
+        ${lowercase} ${upperentity}
         #--use_model2
 }
 
@@ -57,11 +59,11 @@ predict() {
         --batch_size ${batch_size} \
         --load ${weight_file} \
         --bt_obj ${bt_obj} \
-        --num_feat ${num_feat} ${more} &> ${weight_file}${suffix}
+        --num_feat ${num_feat} ${more} ${lowercase} ${upperentity} &> ${weight_file}${suffix}
 }
 
 # optimize with softmax
-for feat_type in feature_train feature_test
+for feat_type in feature_train #feature_test
 do
     head_tail_dir=""
     if [ $feat_type == feature_train ]; then
