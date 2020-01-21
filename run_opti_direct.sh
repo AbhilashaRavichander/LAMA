@@ -7,8 +7,10 @@ temp=$4
 cuda1=$5
 cuda2=$6
 batch_size=32
-lowercase=--lowercase
-upperentity=--upper_entity
+#lowercase=--lowercase
+#upperentity=--upper_entity
+lowercase=""
+upperentity=""
 #set -e
 
 optimize_on_the_fly() {  # only use for log features
@@ -72,7 +74,7 @@ do
         head_tail_dir=data/TREx
     fi
     (CUDA_VISIBLE_DEVICES=$cuda1 optimize_on_the_fly ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight_${temp}/feat1_log_sm.pt 1 ${temp} ; CUDA_VISIBLE_DEVICES=$cuda1 predict ${lm} data/TREx ${feature_root_dir}/${feat_type}/weight_${temp}/feat1_log_sm.pt 1 .out) &
-    (CUDA_VISIBLE_DEVICES=$cuda2 optimize_on_the_fly ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight_${temp}/feat2_log_sm.pt 2 ${temp} ; CUDA_VISIBLE_DEVICES=$cuda2 predict ${lm} data/TREx ${feature_root_dir}/${feat_type}/weight_${temp}/feat2_log_sm.pt 2 .out) &
+    #(CUDA_VISIBLE_DEVICES=$cuda2 optimize_on_the_fly ${head_tail_dir} ${feature_root_dir}/${feat_type}/weight_${temp}/feat2_log_sm.pt 2 ${temp} ; CUDA_VISIBLE_DEVICES=$cuda2 predict ${lm} data/TREx ${feature_root_dir}/${feat_type}/weight_${temp}/feat2_log_sm.pt 2 .out) &
     wait
 done
 
