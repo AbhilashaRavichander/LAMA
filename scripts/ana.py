@@ -902,6 +902,19 @@ def combine_prompt(args, max1=30, max2=10):
                     fout.write(l)
 
 
+def collect_uris(args):
+    uris = set()
+    for root, dirs, files in os.walk(args.inp):
+        for file in files:
+            with open(os.path.join(root, file), 'r') as fin:
+                for l in fin:
+                    l = json.loads(l.strip())
+                    uris.add(l['sub_uri'])
+                    uris.add(l['obj_uri'])
+    with open(args.out, 'w') as fout:
+        fout.write('\n'.join(uris) + '\n')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='analyze output log')
     parser.add_argument('--task', type=str, help='task', required=True, 
@@ -909,7 +922,7 @@ if __name__ == '__main__':
                  'get_ppdb', 'case', 'merge_all_rel', 'split_dev', 'weight_ana', 'weight_out',
                  'out_ana_opti', 'bt_filter', 'case_study', 'out_all_ana', 'sub_obj',
                  'template_divergence', 'subj_obj_distance', 'pos_tag_ana', 'rank_edit',
-                 'combine_prompt'])
+                 'combine_prompt', 'collect_uris'])
     parser.add_argument('--inp', type=str, help='input file')
     parser.add_argument('--obj_file', type=str, help='obj file', default=None)
     parser.add_argument('--out', type=str, help='output file')
@@ -960,3 +973,5 @@ if __name__ == '__main__':
         pos_tag_ana(args)
     elif args.task == 'combine_prompt':
         combine_prompt(args, max1=30, max2=10)
+    elif args.task == 'collect_uris':
+        collect_uris(args)

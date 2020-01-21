@@ -56,21 +56,28 @@ CASED_MODELS = [
     "bert_model_dir": "pre-trained_language_models/bert/cased_L-24_H-1024_A-16/",
     "bert_vocab_name": "vocab.txt"
   },
-  '''
   {
-    # "RoBERTa BASE CASED"
-    "lm": "roberta",
-    "label": "roberta_base",
-    "models_names": ["roberta"],
-    "roberta_model_name": "model.pt",
-    "roberta_model_dir": "pre-trained_language_models/roberta/roberta.base",
-    "roberta_vocab_name": "dict.txt",
-    "max_sentence_length": 100
-  }
-  '''
+    # "MBERT BASE CASED"
+    "lm": "bert",
+    "bert_model_name": "bert-base-multilingual-cased",
+    "bert_model_dir": "pre-trained_language_models/bert/multi_cased_L-12_H-768_A-12/",
+    "bert_vocab_name": "vocab.txt"
+  },
 ]
+'''
+{
+# "RoBERTa BASE CASED"
+"lm": "roberta",
+"label": "roberta_base",
+"models_names": ["roberta"],
+"roberta_model_name": "model.pt",
+"roberta_model_dir": "pre-trained_language_models/roberta/roberta.base",
+"roberta_vocab_name": "dict.txt",
+"max_sentence_length": 100
+}
+'''
 
-CASED_COMMON_VOCAB_FILENAME = "pre-trained_language_models/common_vocab_cased.txt"
+CASED_COMMON_VOCAB_FILENAME = "pre-trained_language_models/common_vocab_cased_mbert.txt"
 
 LOWERCASED_MODELS = [
  {
@@ -163,7 +170,7 @@ def main():
     # cased version
     __vocab_intersection(CASED_MODELS, CASED_COMMON_VOCAB_FILENAME)
     # lowercased version
-    __vocab_intersection(LOWERCASED_MODELS, LOWERCASED_COMMON_VOCAB_FILENAME)
+    #__vocab_intersection(LOWERCASED_MODELS, LOWERCASED_COMMON_VOCAB_FILENAME)
 
 
 if __name__ == '__main__':

@@ -10,8 +10,10 @@ sort_temp_score_dir=$6
 sort_temp_score_dir_nom=${sort_temp_score_dir}_nomanual
 
 top_rel=40
-lowercase=--lowercase
-upperentity=--upper_entity
+#lowercase=--lowercase
+#upperentity=--upper_entity
+lowercase=""
+upperentity=""
 
 #set -e
 

@@ -289,6 +289,7 @@ def filter_samples(model, samples, vocab_subset, max_sentence_length, template):
                 msg += "\tEXCLUDED object label {} not in model vocabulary\n".format(
                     sample["obj_label"]
                 )
+                print('reconstructed_word_not_the_same', recostructed_word, sample['obj_label'])
                 samples_exluded += 1
             # elif vocab_subset is not None and sample['obj_label'] not in vocab_subset:
             #   msg += "\tEXCLUDED object label {} not in vocab subset\n".format(sample['obj_label'])
