@@ -466,8 +466,9 @@ def main(args,
                     raw_sample["raw_sub_label"].strip() if args.upper_entity else sample["sub_label"].strip(),
                     model.mask_token
                 )
+                sub_uri = raw_sample['sub_uri'] if 'sub_uri' in raw_sample else raw_sample['sub']
                 sample['entity_list'] = get_entity_list(
-                    template.strip(), raw_sample['raw_sub_label'].strip(), raw_sample['sub_uri'], None, None
+                    template.strip(), raw_sample['raw_sub_label'].strip(), sub_uri, None, None
                 )
                 if dynamic.startswith('bt_topk') or (temp_model is not None and bt_obj):
                     sample['sub_masked_sentences'] = parse_template_tokenize(

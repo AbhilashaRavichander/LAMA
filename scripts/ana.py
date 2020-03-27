@@ -296,6 +296,87 @@ def get_train_data(args, top=1000):
                 fout.write(json.dumps(rel) + '\n')
 
 
+def get_googlere_train_data(args, top=1000):
+    # data/property_occurrence_prop435k/
+    # data/eid2name.tsv
+    # data/wikidata2freebase.tsv
+    occ_dir, name_file, wiki2freebase_file = args.inp.split(':')
+
+    eid2name = {}
+    with open(name_file, 'r') as fin:
+        for l in tqdm(fin):
+            l = l.strip().split('\t')
+            eid2name[l[0]] = l[1]
+
+    wiki2freebase = {}
+    with open(wiki2freebase_file, 'r') as fin:
+        for l in tqdm(fin):
+            l = l.strip().split('\t')
+            wiki2freebase[l[0]] = l[1]
+
+    pids = []
+    pid2hts: Dict[str, set] = defaultdict(set)
+    for root, dirs, files in os.walk('data/googlere/'):
+        for file in files:
+            pid = file.split('.', 1)[0]
+            pids.append(pid)
+            with open(os.path.join(root, file), 'r') as fin:
+                for l in fin:
+                    l = json.loads(l)
+                    if pid == 'P569':
+                        pid2hts[pid].add(l['sub'])
+                    else:
+                        pid2hts[pid].add((l['sub'], l['obj']))
+    print(len(pids), pids)
+
+    for pid in tqdm(pids):
+        occ_file = os.path.join(occ_dir, pid + '.txt')
+        if not os.path.exists(occ_file):
+            raise Exception('{} not exist'.format(occ_file))
+        hts = set()
+        with open(occ_file, 'r') as fin:
+            for l in fin:
+                h, t = l.strip().split()
+                if pid == 'P569':
+                    if h not in wiki2freebase:
+                        continue
+                    if wiki2freebase[h] in pid2hts[pid]:
+                        continue
+                    if h not in eid2name:
+                        continue
+                    if len(eid2name[h].split()) > 1:
+                        continue
+                    if len(t) != 8:
+                        continue
+                else:
+                    if h not in wiki2freebase or t not in wiki2freebase:
+                        continue
+                    if (wiki2freebase[h], wiki2freebase[t]) in pid2hts[pid]:
+                        continue
+                    if h not in eid2name or t not in eid2name:
+                        continue
+                    if len(eid2name[h].split()) > 1 or len(eid2name[t].split()) > 1:
+                        continue
+                hts.add((h, t))
+                if len(hts) >= 10 * top:
+                    break
+        if len(hts) <= top:
+            print('{} less than {}'.format(pid, top))
+        hts = list(hts)
+        shuffle(hts)
+        hts = hts[:top]
+
+        with open(os.path.join(args.out, pid + '.jsonl'), 'w') as fout:
+            for h, t in hts:
+                rel = {
+                    'sub_uri': wiki2freebase[h],
+                    'obj_uri': t if pid == 'P569' else wiki2freebase[t],
+                    'sub_label': eid2name[h],
+                    'obj_label': t[:4] if pid == 'P569' else eid2name[t]
+                }
+                fout.write(json.dumps(rel) + '\n')
+
+
 def parse_ppdb_result(response: str):
     response = json.loads(response)['hits']
     num = response['found']
@@ -922,7 +1003,7 @@ if __name__ == '__main__':
                  'get_ppdb', 'case', 'merge_all_rel', 'split_dev', 'weight_ana', 'weight_out',
                  'out_ana_opti', 'bt_filter', 'case_study', 'out_all_ana', 'sub_obj',
                  'template_divergence', 'subj_obj_distance', 'pos_tag_ana', 'rank_edit',
-                 'combine_prompt', 'collect_uris'])
+                 'combine_prompt', 'collect_uris', 'get_googlere_train_data'])
     parser.add_argument('--inp', type=str, help='input file')
     parser.add_argument('--obj_file', type=str, help='obj file', default=None)
     parser.add_argument('--out', type=str, help='output file')
@@ -948,7 +1029,7 @@ if __name__ == '__main__':
     elif args.task == 'case':
         case_ana(args)
     elif args.task == 'merge_all_rel':
-        merge_all_rel(args, top=30)
+        merge_all_rel(args, top=40)
     elif args.task == 'split_dev':
         split_dev(args)
     elif args.task == 'weight_ana':
@@ -975,3 +1056,5 @@ if __name__ == '__main__':
         combine_prompt(args, max1=30, max2=10)
     elif args.task == 'collect_uris':
         collect_uris(args)
+    elif args.task == 'get_googlere_train_data':
+        get_googlere_train_data(args)

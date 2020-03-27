@@ -4,6 +4,7 @@ raw_temp_file=$1
 model_dir=$2
 beam=$3
 final_temp_dir=$4
+rel_file=data/TREx_mt/rel.txt
 
 forward_model_dir=${model_dir}/wmt19.en-de.joined-dict.ensemble
 backward_model_dir=${model_dir}/wmt19.de-en.joined-dict.ensemble
@@ -29,7 +30,7 @@ grep -P '^H' ${forward_temp_file} | awk -F'[\t]' '{print $3}' | fairseq-interact
 mkdir -p ${final_temp_dir}
 python scripts/ana.py \
     --task bt_filter \
-    --temp_file data/TREx_mt/rel.txt:${raw_temp_file} \
+    --temp_file ${rel_file}:${raw_temp_file} \
     --inp ${forward_temp_file}:${backward_temp_file} \
     --out ${final_temp_dir} \
     --beam ${beam}

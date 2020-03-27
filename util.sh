@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 
+root_dir=data/TREx
+#root_dir=data/googlere
+obj_dir=output/exp/trex_subobjs
+#obj_dir=output/exp/googlere_subobjs
+
 eval() {
     # | grep -P '^first [0-9].+' | awk -F'[ ,]' '{print $2}'
     # | awk '{sum += $1} END {print "mean = " sum/NR}'
     set -e
-    for file in data/TREx/*; do
+    for file in ${root_dir}/*; do
         bfile=$(basename "${file}")
         outfile=${1}/${bfile}.out
-        objfile=output/exp/trex_subobjs/${bfile}.out
+        objfile=${obj_dir}/${bfile}.out
         echo ${bfile}
         if [ -f "${outfile}" ]; then
             if [ $# -gt 1 ]; then
@@ -21,7 +26,7 @@ eval() {
 
 eval_opti() {
     if [ $# -gt 1 ]; then
-        python scripts/ana.py --task out_ana_opti --inp $1 --obj_file output/exp/trex_subobjs
+        python scripts/ana.py --task out_ana_opti --inp $1 --obj_file ${obj_dir}
     else
         python scripts/ana.py --task out_ana_opti --inp $1
     fi
@@ -32,7 +37,7 @@ eval_all() {
     for file in data/TREx/*; do
         bfile=$(basename "${file}")
         outfile=${1}/${bfile}.out
-        objfile=output/exp/trex_subobjs/${bfile}.out
+        objfile=${obj_dir}/${bfile}.out
         echo ${bfile}
         if [ -f "${outfile}" ]; then
             if [ $# -gt 1 ]; then
