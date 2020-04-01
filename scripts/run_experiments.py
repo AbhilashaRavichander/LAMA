@@ -102,6 +102,15 @@ LM_ROBERTA_BASE = {
     "roberta_vocab_name": "dict.txt"
 }
 
+LM_ROBERTA_WIKI = {
+    "lm": "roberta",
+    "label": "roberta_wiki",
+    "models_names": ["roberta"],
+    "roberta_model_name": "model.pt",
+    "roberta_model_dir": "pre-trained_language_models/roberta/roberta.wikitext",
+    "roberta_vocab_name": "dict.txt"
+}
+
 LM_ERNIE_BASE = {
     "lm": "ernie",
     "label": "ernie_base",
@@ -124,6 +133,7 @@ name2lm = {
     'bert_large': LM_BERT_LARGE,
     'mbert_base': LM_MBERT_BASE,
     'roberta_base': LM_ROBERTA_BASE,
+    'roberta_wiki': LM_ROBERTA_WIKI,
     'ernie_base': LM_ERNIE_BASE,
     'knowbert_base': LM_KNOWBERT_BASE
 }
@@ -481,7 +491,7 @@ if __name__ == "__main__":
     logging.disable(logging.WARNING)
     parser = argparse.ArgumentParser(description='run exp for multiple relational phrase')
     parser.add_argument('--lm_model', type=str, default='bert_base',
-                        choices=['bert_base', 'bert_large', 'mbert_base', 'roberta_base',
+                        choices=['bert_base', 'bert_large', 'mbert_base', 'roberta_base', 'roberta_wiki',
                                  'ernie_base', 'knowbert_base'])
     parser.add_argument('--rel_file', type=str, default='data/Google_RE_patty_template/place_of_death.jsonl')
     parser.add_argument('--refine_template', type=str, default=None)
